@@ -1,213 +1,104 @@
 # 2.2 Docker Deployment
 
-This section explains how to build and run the webapp as a Docker
-container, and how to integrate it with common self-hosting tools.
+This section describes the production-style local runtime using Docker Compose.
 
----
+## Services
 
-## Overview
+- `frontend`: static Vite build served by nginx.
+- `api`: FastAPI service serving filesystem endpoints and media files.
+- `proxy`: nginx reverse proxy exposed to users.
 
-The webapp is a **static single-page application** (SPA) built with
-React and Vite. The build output is a set of plain HTML, CSS, and
-JavaScript files that are served by an nginx container.
+## Recommended Runtime Topology
 
-A two-stage Dockerfile is provided:
+1. `api` mounts the film library from `./server/data/films` to `/data/films`.
+2. `frontend` serves the SPA on internal Docker network.
+3. `proxy` routes:
+	 - `/api` -> `api:8000`
+	 - `/media` -> `api:8000`
+	 - `/` -> `frontend:80`
 
-1. **Build stage** — Node 20 Alpine + pnpm compiles the sources into
-   `/app/dist`.
-2. **Serve stage** — nginx Alpine copies the compiled assets and exposes
-   port `80`.
-
-Because the runtime image contains only nginx and static files, the
-memory and CPU footprint is deliberately small.
-
----
-
-## Resource Requirements
-
-| Resource | Limit       | Reservation |
-|----------|-------------|-------------|
-| CPU      | 0.25 cores  | 0.05 cores  |
-| Memory   | 64 MB       | 16 MB       |
-
-These values reflect a lightly loaded static-file service. Adjust them
-in `docker-compose.yml` under the `deploy.resources` key if you expect
-higher traffic.
-
----
-
-## Building and Running Locally
-
-### Build the image
+## Start the stack
 
 ```bash
-docker build -t template-repository-webapp .
+docker compose up -d --build
 ```
 
-### Run the container
+App URL: `http://localhost:3000`
+
+## Stop the stack
 
 ```bash
-docker run -d --name webapp -p 3000:80 template-repository-webapp
+docker compose down
 ```
 
-The app is now available at <http://localhost:3000>.
+## Hot-reload development variant
 
-### Using Docker Compose
+Use the `dev` profile from the main Compose file to avoid image rebuilds on
+source changes.
+
+### Services
+
+- `frontend-dev`: Vite dev server with HMR.
+- `api-dev`: FastAPI with `uvicorn --reload`.
+- `proxy-dev`: nginx reverse-proxy exposing a single entrypoint.
+
+### Start
 
 ```bash
-# Start both the webapp and the MkDocs documentation server
-docker compose up -d
-
-# Rebuild after a source change
-docker compose up -d --build webapp
+docker compose stop proxy frontend api
+docker compose up -d --build frontend-dev api-dev proxy-dev
 ```
 
-### Verify the health endpoint
+This sequence avoids a port conflict on `3000` by stopping the standard proxy
+before starting the dev proxy.
 
-The nginx configuration exposes a lightweight health probe at `/healthz`:
+### Logs (optional)
 
 ```bash
-curl http://localhost:3000/healthz
-# ok
+docker compose logs -f frontend-dev api-dev proxy-dev
 ```
 
----
-
-## Ports
-
-| Host port | Container port | Description           |
-|-----------|----------------|-----------------------|
-| `3000`    | `80`           | Webapp (nginx)        |
-| `8000`    | `8000`         | MkDocs documentation  |
-
-Change the host port in the `ports` mapping of `docker-compose.yml` if
-`3000` is already taken on your host.
-
----
-
-## Traefik Integration
-
-Traefik is a popular reverse proxy. Enable the labels in
-`docker-compose.yml` and connect the container to the external Traefik
-network:
-
-```yaml
-services:
-  webapp:
-    # ... (other settings)
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.webapp.rule=Host(`app.example.com`)"
-      - "traefik.http.routers.webapp.entrypoints=websecure"
-      - "traefik.http.routers.webapp.tls.certresolver=letsencrypt"
-      - "traefik.http.services.webapp.loadbalancer.server.port=80"
-    networks:
-      - traefik_public
-
-networks:
-  traefik_public:
-    external: true
-```
-
-Traefik discovers the container automatically and issues a TLS
-certificate via Let's Encrypt.
-
----
-
-## NGINX Proxy Manager Integration
-
-[nginx Proxy Manager](https://nginxproxymanager.com/) (NPM) provides a
-web UI to manage reverse-proxy rules.
-
-1. In `docker-compose.yml`, keep the `ports` mapping (e.g., `3000:80`)
-   so NPM can reach the container.
-2. In the NPM dashboard, create a **Proxy Host**:
-   - **Domain Names**: `app.example.com`
-   - **Scheme**: `http`
-   - **Forward Hostname / IP**: the Docker host IP or container name
-   - **Forward Port**: `3000`
-   - Enable **Block Common Exploits** and **Websockets Support** if
-     needed.
-   - On the **SSL** tab, request a Let's Encrypt certificate.
-
-No label configuration is needed; NPM uses its own database.
-
----
-
-## Tailscale Integration
-
-[Tailscale](https://tailscale.com/) lets you expose the container
-exclusively on your private mesh network.
-
-Use the Tailscale sidecar pattern: a `tailscale` service shares its
-network namespace with the `webapp` service so that nginx binds to the
-Tailscale interface.
-
-```yaml
-services:
-  webapp:
-    # Remove the host ports mapping — access is through Tailscale only
-    # ports:
-    #   - "3000:80"
-    network_mode: "service:tailscale"
-    depends_on:
-      - tailscale
-
-  tailscale:
-    image: tailscale/tailscale:latest
-    hostname: template-repository
-    environment:
-      - TS_AUTHKEY=${TS_AUTHKEY}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=false
-    volumes:
-      - tailscale_state:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    restart: unless-stopped
-
-volumes:
-  tailscale_state:
-```
-
-Set `TS_AUTHKEY` in a `.env` file (never commit this file). The machine
-will appear in your Tailscale admin console as `template-repository` and
-will be reachable at its Tailscale IP on port `80`.
-
----
-
-## Dokploy Integration
-
-[Dokploy](https://dokploy.com/) is a self-hosted PaaS that manages
-Docker-based deployments.
-
-1. In the Dokploy dashboard, create a new **Application**.
-2. Point it at this repository (or a container registry where the image
-   is published).
-3. Set the **Dockerfile path** to `Dockerfile`.
-4. Set the **Port** to `80` (the container port exposed by nginx).
-5. Configure the **Domain** in Dokploy's proxy settings — Dokploy
-   handles Traefik configuration automatically.
-6. Set any required **Environment Variables** (e.g., `TS_AUTHKEY` if
-   using Tailscale).
-
-Dokploy will build the image, deploy the container, and wire up the
-reverse proxy without any manual `docker compose` commands.
-
----
-
-## Publishing the Image
-
-To publish the image to GitHub Container Registry so that other hosts
-can pull it without rebuilding:
+### Stop
 
 ```bash
-docker build -t ghcr.io/your-org/template-repository-webapp:latest .
-docker push ghcr.io/your-org/template-repository-webapp:latest
+docker compose down
 ```
 
-The `docker-compose.yml` references this registry image via the `image`
-key. When `build` is also specified, Compose uses the local build and
-tags the resulting image accordingly.
+### Runtime URLs
+
+- App (via proxy): `http://localhost:3000`
+- Health (via proxy): `http://localhost:3000/health`
+
+### Hot-reload behavior
+
+- Frontend code edits under `src/` refresh through Vite HMR.
+- Backend code edits under `server/app/` reload FastAPI automatically.
+- Dataset updates under `server/data/films/` are visible without rebuild.
+
+## Optional docs service
+
+MkDocs is isolated behind the `docs` profile:
+
+```bash
+docker compose --profile docs up -d mkdocs
+```
+
+Docs URL: `http://localhost:8000`
+
+## Minimal validation checklist
+
+1. `http://localhost:3000/health` returns `{"status":"ok"}`.
+2. `http://localhost:3000/api/filesystem/films` returns film folders.
+3. `http://localhost:3000/media/...` serves frame images.
+4. Main UI at `http://localhost:3000/` can load films and reels.
+
+## Film dataset location
+
+Place datasets in:
+
+```text
+server/data/films/
+	<film_id>/
+		<reel_id>/
+			frame0001.png
+```

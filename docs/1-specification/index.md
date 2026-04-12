@@ -1,15 +1,13 @@
 # 1. Specification
 
-This section contains the functional and technical specification for
-the reference webapp prepared from this repository template.
+This section defines the product and technical requirements for Film Sequence
+Finder.
 
 ## Sections
 
-- [1.1 Basic Webapp](1.1-basic-webapp/index.md)
+- [1.1 Film Sequence Finder](1.1-film-sequence-finder/index.md)
 
 ## Summary
 
-The application is a responsive dashboard that lets a user curate
-favorite GitHub repository templates, classify them with tags,
-persist data locally in IndexedDB, and manage JSON-based import and
-export backups.
+The platform lets an operator select a film, enumerate original reel
+directories, and preview each frame sequence through a Remotion player.

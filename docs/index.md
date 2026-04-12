@@ -1,7 +1,8 @@
-# Template Repository Documentation
+# Film Sequence Finder Documentation
 
-This documentation defines the baseline specification for a basic
-webapp built from this repository template.
+This documentation describes the Film Sequence Finder platform.
+The product helps an operator locate and review original reel image
+sequences starting from a selected film.
 
 ## Sections
 
@@ -12,6 +13,8 @@ webapp built from this repository template.
 
 ## Current Scope
 
-The current documented scope covers a React-based dashboard used to
-manage favourite GitHub repository templates, their tags, and local
-backup operations.
+The current scope includes:
+
+- A Vite + React + TypeScript frontend.
+- Remotion-based playback for reel image sequences.
+- A FastAPI backend for filesystem operations and media serving.

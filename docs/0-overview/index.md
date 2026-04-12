@@ -1,8 +1,7 @@
 # Overview
 
-Template Repository is a boilerplate application template that provides a
-predefined project structure and best practices to help you quickly start new
-projects.
+Film Sequence Finder is a dedicated application for discovering and visualizing
+original reel image sequences from a film dataset stored on a filesystem.
 
 ## Sections
 
@@ -10,5 +9,5 @@ projects.
 
 ## Resources
 
-- [Presentation](https://template-repository.tiogars.fr/presentation/index.html)
-- [Storybook](https://template-repository.tiogars.fr/storybook/)
+- [Frontend application](../index.md)
+- [FastAPI server README](../../server/README.md)
