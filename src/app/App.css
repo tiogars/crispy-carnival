@@ -27,6 +27,17 @@
   margin: 0;
 }
 
+.app__docs-link {
+  color: #0d47a1;
+  font-weight: 600;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.app__docs-link:hover {
+  text-decoration: underline;
+}
+
 .app__label {
   font-weight: 600;
   margin-top: 0.5rem;
