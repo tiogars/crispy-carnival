@@ -19,7 +19,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Filesystem convention
 
-`FILM_LIBRARY_ROOT` must contain one folder per film, and each film folder must contain one folder per reel sequence.
+`FILM_LIBRARY_ROOT` must contain one folder per film, and each film folder must
+contain one folder per reel sequence.
 
 Example:
 

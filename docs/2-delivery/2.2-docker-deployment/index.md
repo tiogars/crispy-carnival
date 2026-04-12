@@ -13,9 +13,9 @@ This section describes the production-style local runtime using Docker Compose.
 1. `api` mounts the film library from `./server/data/films` to `/data/films`.
 2. `frontend` serves the SPA on internal Docker network.
 3. `proxy` routes:
-	 - `/api` -> `api:8000`
-	 - `/media` -> `api:8000`
-	 - `/` -> `frontend:80`
+    - `/api` -> `api:8000`
+    - `/media` -> `api:8000`
+    - `/` -> `frontend:80`
 
 ## Start the stack
 
@@ -36,7 +36,7 @@ docker compose down
 Use the `dev` profile from the main Compose file to avoid image rebuilds on
 source changes.
 
-### Services
+### Dev services
 
 - `frontend-dev`: Vite dev server with HMR.
 - `api-dev`: FastAPI with `uvicorn --reload`.
@@ -98,7 +98,7 @@ Place datasets in:
 
 ```text
 server/data/films/
-	<film_id>/
-		<reel_id>/
-			frame0001.png
+  <film_id>/
+    <reel_id>/
+      frame0001.png
 ```
