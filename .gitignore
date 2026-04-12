@@ -5,3 +5,4 @@ storybook-static/
 package-lock.json
 .pnpm-store/
 site_output/
+server/data/
