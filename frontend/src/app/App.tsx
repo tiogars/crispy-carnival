@@ -22,7 +22,7 @@ type ReelFramesResponse = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
 const documentationUrl =
-  import.meta.env.VITE_DOCUMENTATION_URL ?? 'https://github.com/tiogars/crispy-carnival/tree/main/docs';
+  import.meta.env.VITE_DOCUMENTATION_URL ?? 'http://localhost:8000';
 
 const fetchJson = async <T,>(path: string): Promise<T> => {
   const response = await fetch(`${apiBaseUrl}${path}`);
