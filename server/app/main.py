@@ -62,15 +62,40 @@ def _safe_join(root: Path, fragment: str) -> Path:
     return candidate
 
 
-def _list_image_files(folder: Path) -> list[Path]:
-    return sorted(
-        [
-            child
-            for child in folder.iterdir()
-            if child.is_file() and child.suffix.lower() in IMAGE_SUFFIXES
-        ],
-        key=lambda path: path.name.lower(),
-    )
+def _list_image_filenames(folder: Path) -> list[str]:
+    # Use os.scandir to avoid Path object allocations and os.path.splitext to
+    # avoid Path() construction per entry – critical for reels with 100k+ frames.
+    names: list[str] = []
+
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+
+            _, ext = os.path.splitext(entry.name)
+
+            if ext.lower() in IMAGE_SUFFIXES:
+                names.append(entry.name)
+
+    names.sort(key=str.lower)
+    return names
+
+
+def _count_image_files(folder: Path) -> int:
+    # Fast path for large reel folders: avoid sorting and Path object allocations.
+    count = 0
+
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+
+            _, ext = os.path.splitext(entry.name)
+
+            if ext.lower() in IMAGE_SUFFIXES:
+                count += 1
+
+    return count
 
 
 @app.get('/health')
@@ -100,7 +125,7 @@ def get_reels(film_id: str) -> ReelsResponse:
     reels = sorted([child for child in film_path.iterdir() if child.is_dir()], key=lambda path: path.name.lower())
 
     response = [
-        ReelItem(id=reel.name, frameCount=len(_list_image_files(reel)))
+        ReelItem(id=reel.name, frameCount=_count_image_files(reel))
         for reel in reels
     ]
 
@@ -119,11 +144,11 @@ def get_reel_frames(film_id: str, reel_id: str) -> FramesResponse:
     if not reel_path.exists() or not reel_path.is_dir():
         raise HTTPException(status_code=404, detail='Reel not found.')
 
-    image_files = _list_image_files(reel_path)
+    image_names = _list_image_filenames(reel_path)
 
     frames = [
-        f'/media/{quote(film_id)}/{quote(reel_id)}/{quote(image.name)}'
-        for image in image_files
+        f'/media/{quote(film_id)}/{quote(reel_id)}/{quote(name)}'
+        for name in image_names
     ]
 
     return FramesResponse(reelId=reel_id, frames=frames)
