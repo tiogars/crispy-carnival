@@ -6,7 +6,7 @@ Remotion.
 
 ## Architecture
 
-- Frontend: Vite, React, TypeScript, Remotion Player
+- Frontend: Vite, React, TypeScript, Remotion Player webapp in `frontend/`
 - Backend: FastAPI filesystem API in `server/`
 - Data source: filesystem directories mounted as film library
 
