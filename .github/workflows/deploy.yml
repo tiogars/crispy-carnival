@@ -31,18 +31,19 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm -C frontend install --frozen-lockfile
 
       - name: Build webapp
-        run: pnpm run build
+        run: pnpm -C frontend run build
 
       - name: Upload webapp artifact
         uses: actions/upload-artifact@v4
         with:
           name: webapp
-          path: dist/
+          path: frontend/dist/
 
   build-docs:
     runs-on: ubuntu-latest
@@ -54,7 +55,7 @@ jobs:
         run: |
           docker run \
             -v ${{ github.workspace }}/docs:/server/docs \
-            -v ${{ github.workspace }}/mkdocs.yml:/server/mkdocs.yml \
+            -v ${{ github.workspace }}/docs/settings/mkdocs.yml:/server/mkdocs.yml \
             -v ${{ github.workspace }}/site_output:/server/site_output \
             -w /server/ \
             ghcr.io/tiogars/mkdocs-docker-image:latest \
@@ -82,18 +83,19 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm -C frontend install --frozen-lockfile
 
       - name: Build Storybook
-        run: pnpm run build-storybook
+        run: pnpm -C frontend run build-storybook
 
       - name: Upload Storybook artifact
         uses: actions/upload-artifact@v4
         with:
           name: storybook
-          path: storybook-static/
+          path: frontend/storybook-static/
 
   build-slides:
     runs-on: ubuntu-latest

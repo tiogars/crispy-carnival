@@ -19,6 +19,7 @@ Remotion.
 ## Frontend setup
 
 ```bash
+cd frontend
 pnpm install
 pnpm dev
 ```
