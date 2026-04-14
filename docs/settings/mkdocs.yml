@@ -56,6 +56,15 @@ theme:
     - toc.integrate
     - content.code.copy
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/tiogars/crispy-carnival
+      name: GitHub Repository
+    - icon: fontawesome/solid/bug
+      link: https://github.com/tiogars/crispy-carnival/issues/new
+      name: Create an Issue
+
 plugins:
   - search
 
