@@ -1,6 +1,8 @@
 import AutoAwesomeMotionOutlinedIcon from '@mui/icons-material/AutoAwesomeMotionOutlined';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import GitHubIcon from '@mui/icons-material/GitHub';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import {
   AppBar,
@@ -45,6 +47,26 @@ export function Header({
           sx={{ display: { xs: 'none', md: 'flex' }, mr: 0 }}
         />
         <Box>
+          <IconButton
+            aria-label="Open GitHub repository"
+            color="inherit"
+            component="a"
+            href="https://github.com/tiogars/crispy-carnival"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GitHubIcon />
+          </IconButton>
+          <IconButton
+            aria-label="Create GitHub issue"
+            color="inherit"
+            component="a"
+            href="https://github.com/tiogars/crispy-carnival/issues/new"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <BugReportOutlinedIcon />
+          </IconButton>
           <IconButton aria-label="Toggle theme" color="inherit" onClick={onToggleTheme}>
             {themeMode === 'light' ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
           </IconButton>

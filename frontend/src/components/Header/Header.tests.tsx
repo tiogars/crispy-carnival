@@ -39,4 +39,22 @@ describe('Header', () => {
 
     expect(handleToggleSeededFavorite).toHaveBeenCalledTimes(1);
   });
+
+  it('renders the GitHub repository and issue actions in the header', () => {
+    render(
+      <Header
+        themeMode="light"
+        showSeededFavorite={true}
+        onToggleTheme={() => undefined}
+        onToggleSeededFavorite={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText('Open GitHub repository').getAttribute('href')).toBe(
+      'https://github.com/tiogars/crispy-carnival',
+    );
+    expect(screen.getByLabelText('Create GitHub issue').getAttribute('href')).toBe(
+      'https://github.com/tiogars/crispy-carnival/issues/new',
+    );
+  });
 });

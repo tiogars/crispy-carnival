@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
+import GitHubIcon from '@mui/icons-material/GitHub';
 import { Player } from '@remotion/player';
 
 import { FilmSequenceComposition } from '../features/film-viewer/FilmSequenceComposition';
@@ -20,9 +22,11 @@ type ReelFramesResponse = {
   frames: string[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 const documentationUrl =
   import.meta.env.VITE_DOCUMENTATION_URL ?? 'http://localhost:8000';
+const repositoryUrl = 'https://github.com/tiogars/crispy-carnival';
+const createIssueUrl = 'https://github.com/tiogars/crispy-carnival/issues/new';
 
 const fetchJson = async <T,>(path: string): Promise<T> => {
   const response = await fetch(`${apiBaseUrl}${path}`);
@@ -128,68 +132,92 @@ export const App = () => {
   }, [frameUrls.length]);
 
   return (
-    <main className="app">
-      <section className="app__panel">
-        <h1>Original Reel Sequence Finder</h1>
-        <p>Choose a film, inspect its original reels, and preview every scanned image frame.</p>
-        <a className="app__docs-link" href={documentationUrl} target="_blank" rel="noreferrer">
-          Open documentation
-        </a>
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <p className="app-header__eyebrow">Film Sequence Finder</p>
+          <h1 className="app-header__title">Original Reel Sequence Finder</h1>
+          <p className="app-header__description">
+            Choose a film, inspect its original reels, and preview every scanned image frame.
+          </p>
+        </div>
+        <nav className="app-header__actions" aria-label="Project links">
+          <a className="app-header__link" href={documentationUrl} target="_blank" rel="noreferrer">
+            Open documentation
+          </a>
+          <a className="app-header__link" href={repositoryUrl} target="_blank" rel="noreferrer">
+            <GitHubIcon fontSize="small" />
+            GitHub repository
+          </a>
+          <a className="app-header__link" href={createIssueUrl} target="_blank" rel="noreferrer">
+            <BugReportOutlinedIcon fontSize="small" />
+            Create issue
+          </a>
+        </nav>
+      </header>
 
-        <label className="app__label" htmlFor="film-select">
-          Film
-        </label>
-        <select
-          id="film-select"
-          className="app__select"
-          value={selectedFilmId}
-          onChange={(event) => setSelectedFilmId(event.target.value)}
-          disabled={films.length === 0 || isLoading}
-        >
-          {films.map((film) => (
-            <option key={film.id} value={film.id}>
-              {film.displayName}
-            </option>
-          ))}
-        </select>
+      <main className="app">
+        <section className="app__panel">
+          <label className="app__label" htmlFor="film-select">
+            Film
+          </label>
+          <select
+            id="film-select"
+            className="app__select"
+            value={selectedFilmId}
+            onChange={(event) => setSelectedFilmId(event.target.value)}
+            disabled={films.length === 0 || isLoading}
+          >
+            {films.map((film) => (
+              <option key={film.id} value={film.id}>
+                {film.displayName}
+              </option>
+            ))}
+          </select>
 
-        <label className="app__label" htmlFor="reel-select">
-          Reel Sequence
-        </label>
-        <select
-          id="reel-select"
-          className="app__select"
-          value={selectedReelId}
-          onChange={(event) => setSelectedReelId(event.target.value)}
-          disabled={reels.length === 0 || isLoading}
-        >
-          {reels.map((reel) => (
-            <option key={reel.id} value={reel.id}>
-              {reel.id} ({reel.frameCount} frames)
-            </option>
-          ))}
-        </select>
+          <label className="app__label" htmlFor="reel-select">
+            Reel Sequence
+          </label>
+          <select
+            id="reel-select"
+            className="app__select"
+            value={selectedReelId}
+            onChange={(event) => setSelectedReelId(event.target.value)}
+            disabled={reels.length === 0 || isLoading}
+          >
+            {reels.map((reel) => (
+              <option key={reel.id} value={reel.id}>
+                {reel.id} ({reel.frameCount} frames)
+              </option>
+            ))}
+          </select>
 
-        <p className="app__status">
-          {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
-        </p>
-        {errorMessage ? <p className="app__error">{errorMessage}</p> : null}
-      </section>
+          <p className="app__status">
+            {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
+          </p>
+          {errorMessage ? <p className="app__error">{errorMessage}</p> : null}
+        </section>
 
-      <section className="app__preview">
-        <Player
-          component={FilmSequenceComposition}
-          inputProps={{ frameUrls }}
-          durationInFrames={durationInFrames}
-          compositionWidth={1280}
-          compositionHeight={720}
-          fps={24}
-          controls
-          autoPlay={false}
-          loop
-          style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
-        />
-      </section>
-    </main>
+        <section className="app__preview">
+          <Player
+            component={FilmSequenceComposition}
+            inputProps={{ frameUrls }}
+            durationInFrames={durationInFrames}
+            compositionWidth={1280}
+            compositionHeight={720}
+            fps={24}
+            controls
+            autoPlay={false}
+            loop
+            style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
+          />
+        </section>
+      </main>
+
+      <footer className="app-footer">
+        <p>Tiogars 2026</p>
+        <p>Frontend served through Vite and Nginx development proxy.</p>
+      </footer>
+    </div>
   );
 };
