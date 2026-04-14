@@ -2,14 +2,31 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import Alert from '@mui/material/Alert';
-import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, TextField } from '@mui/material';
+import {
+  Box,
+  Button,
+  Checkbox,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  FormControlLabel,
+  InputLabel,
+  Link,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import { Player } from '@remotion/player';
 import { useForm } from 'react-hook-form';
 
 import { FilmSequenceComposition } from '../features/film-viewer/FilmSequenceComposition';
-
-import './App.css';
 
 type Film = {
   id: string;
@@ -394,94 +411,238 @@ export const App = () => {
   }, [frameUrls.length]);
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="app-header__eyebrow">Film Sequence Finder</p>
-          <h1 className="app-header__title">Original Reel Sequence Finder</h1>
-          <p className="app-header__description">
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #eceff1 0%, #dfe5eb 100%)',
+        boxSizing: 'border-box',
+      }}
+    >
+      <Box
+        component="header"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          padding: '1.25rem 1rem 0',
+          alignItems: 'flex-start',
+          flexDirection: { xs: 'column', md: 'row' },
+        }}
+      >
+        <Box>
+          <Typography
+            variant="overline"
+            sx={{
+              margin: 0,
+              marginBottom: '0.35rem',
+              color: '#546e7a',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              display: 'block',
+            }}
+          >
+            Film Sequence Finder
+          </Typography>
+          <Typography variant="h1" sx={{ margin: 0 }}>
+            Original Reel Sequence Finder
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              margin: '0.5rem 0 0',
+              maxWidth: '52rem',
+              color: '#455a64',
+            }}
+          >
             Choose a film, inspect its original reels, and preview every scanned image frame.
-          </p>
-        </div>
-        <nav className="app-header__actions" aria-label="Project links">
-          <a className="app-header__link" href={documentationUrl} target="_blank" rel="noreferrer">
+          </Typography>
+        </Box>
+        <Stack
+          component="nav"
+          aria-label="Project links"
+          direction="row"
+          flexWrap="wrap"
+          gap={0.75}
+          justifyContent={{ xs: 'flex-start', md: 'flex-end' }}
+        >
+          <Link
+            href={documentationUrl}
+            target="_blank"
+            rel="noreferrer"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.45,
+              minHeight: '2.5rem',
+              padding: '0 0.9rem',
+              border: '1px solid rgba(13, 71, 161, 0.18)',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.72)',
+              color: '#0d47a1',
+              fontWeight: 700,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              '&:hover': {
+                background: '#ffffff',
+                borderColor: 'rgba(13, 71, 161, 0.32)',
+              },
+            }}
+          >
             Open documentation
-          </a>
-          <a className="app-header__link" href={repositoryUrl} target="_blank" rel="noreferrer">
+          </Link>
+          <Link
+            href={repositoryUrl}
+            target="_blank"
+            rel="noreferrer"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.45,
+              minHeight: '2.5rem',
+              padding: '0 0.9rem',
+              border: '1px solid rgba(13, 71, 161, 0.18)',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.72)',
+              color: '#0d47a1',
+              fontWeight: 700,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              '&:hover': {
+                background: '#ffffff',
+                borderColor: 'rgba(13, 71, 161, 0.32)',
+              },
+            }}
+          >
             <GitHubIcon fontSize="small" />
             GitHub repository
-          </a>
-          <a className="app-header__link" href={createIssueUrl} target="_blank" rel="noreferrer">
+          </Link>
+          <Link
+            href={createIssueUrl}
+            target="_blank"
+            rel="noreferrer"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.45,
+              minHeight: '2.5rem',
+              padding: '0 0.9rem',
+              border: '1px solid rgba(13, 71, 161, 0.18)',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.72)',
+              color: '#0d47a1',
+              fontWeight: 700,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              '&:hover': {
+                background: '#ffffff',
+                borderColor: 'rgba(13, 71, 161, 0.32)',
+              },
+            }}
+          >
             <BugReportOutlinedIcon fontSize="small" />
             Create issue
-          </a>
-        </nav>
-      </header>
+          </Link>
+        </Stack>
+      </Box>
 
-      <main className="app">
-        <section className="app__panel">
-          <div className="app__label-row">
-            <label className="app__label" htmlFor="film-select">
-              Film
-            </label>
-            <div className="app__panel-actions">
-              <button
-                type="button"
-                className="app__button"
+      <Box
+        component="main"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
+          gap: 1,
+          padding: 1,
+          flex: 1,
+          boxSizing: 'border-box',
+        }}
+      >
+        <Paper
+          component="section"
+          sx={{
+            borderRadius: 1.5,
+            padding: 2,
+            boxShadow: '0 8px 24px rgba(17, 25, 40, 0.08)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+          }}
+        >
+          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={0.75} flexWrap="wrap">
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
                 onClick={() => setCreateFilmDialogOpen(true)}
                 disabled={isLoading}
+                style={{ pointerEvents: 'auto' }}
               >
                 Add film
-              </button>
-              <button
-                type="button"
-                className="app__button app__button--secondary"
+              </Button>
+              <Button
+                variant="contained"
+                color="secondary"
                 onClick={() => setUploadWitnessDialogOpen(true)}
                 disabled={isLoading || !selectedFilmId}
+                style={{ pointerEvents: 'auto' }}
               >
                 Upload witness video
-              </button>
-            </div>
-          </div>
-          <select
-            id="film-select"
-            className="app__select"
-            value={selectedFilmId}
-            onChange={(event) => setSelectedFilmId(event.target.value)}
-            disabled={films.length === 0 || isLoading}
-          >
-            {films.map((film) => (
-              <option key={film.id} value={film.id}>
-                {film.displayName}
-              </option>
-            ))}
-          </select>
+              </Button>
+            </Box>
+          </Stack>
+          <FormControl fullWidth>
+            <InputLabel id="film-select-label">Film</InputLabel>
+            <Select
+              labelId="film-select-label"
+              id="film-select"
+              label="Film"
+              value={selectedFilmId}
+              onChange={(event) => setSelectedFilmId(event.target.value)}
+              disabled={films.length === 0 || isLoading}
+            >
+              {films.map((film) => (
+                <MenuItem key={film.id} value={film.id}>
+                  {film.displayName}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-          <label className="app__label" htmlFor="reel-select">
-            Reel Sequence
-          </label>
-          <select
-            id="reel-select"
-            className="app__select"
-            value={selectedReelId}
-            onChange={(event) => setSelectedReelId(event.target.value)}
-            disabled={reels.length === 0 || isLoading}
-          >
-            {reels.map((reel) => (
-              <option key={reel.id} value={reel.id}>
-                {reel.id} ({reel.frameCount} frames)
-              </option>
-            ))}
-          </select>
+          <FormControl fullWidth sx={{ marginTop: 2 }}>
+            <InputLabel id="reel-select-label">Reel Sequence</InputLabel>
+            <Select
+              labelId="reel-select-label"
+              id="reel-select"
+              label="Reel Sequence"
+              value={selectedReelId}
+              onChange={(event) => setSelectedReelId(event.target.value)}
+              disabled={reels.length === 0 || isLoading}
+            >
+              {reels.map((reel) => (
+                <MenuItem key={reel.id} value={reel.id}>
+                  {reel.id} ({reel.frameCount} frames)
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-          <p className="app__status">
+          <Typography color="text.secondary">
             {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
-          </p>
-          {!selectedFilmId ? <p className="app__status">Select a film to enable witness video upload.</p> : null}
-          {errorMessage ? <p className="app__error">{errorMessage}</p> : null}
-        </section>
+          </Typography>
+          {!selectedFilmId ? <Typography color="text.secondary">Select a film to enable witness video upload.</Typography> : null}
+          {errorMessage ? <Typography color="error" fontWeight={600}>{errorMessage}</Typography> : null}
+        </Paper>
 
-        <section className="app__preview">
+        <Paper
+          component="section"
+          sx={{
+            background: '#101418',
+            borderRadius: 1.5,
+            padding: 2,
+            boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.04)',
+          }}
+        >
           <Player
             component={FilmSequenceComposition}
             inputProps={{ frameUrls }}
@@ -494,53 +655,86 @@ export const App = () => {
             loop
             style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
           />
-          <div className="app__witness-video-panel">
-            <div className="app__label-row">
-              <label className="app__label" htmlFor="witness-video-select">
-                Witness video
-              </label>
-              <div className="app__witness-video-actions">
+          <Box
+            sx={{
+              marginTop: 0.85,
+              padding: 0.85,
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.06)',
+            }}
+          >
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={0.75} flexWrap="wrap">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
                 {selectedWitnessVideoUrl ? (
-                  <a className="app__witness-video-link" href={selectedWitnessVideoUrl} target="_blank" rel="noreferrer">
+                  <Link
+                    href={selectedWitnessVideoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    sx={{
+                      color: '#90caf9',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      '&:hover': {
+                        textDecoration: 'underline',
+                      },
+                    }}
+                  >
                     Open direct file
-                  </a>
+                  </Link>
                 ) : (
-                  <span className="app__status">No direct file available.</span>
+                  <Typography color="text.secondary">No direct file available.</Typography>
                 )}
-                <button
-                  type="button"
-                  className="app__button app__button--danger"
+                <Button
+                  variant="contained"
+                  color="error"
                   onClick={() => setDeleteWitnessDialogOpen(true)}
                   disabled={isDeletingWitnessVideo || !selectedWitnessVideoEntry}
                 >
                   Supprimer la vidéo témoin sélectionnée
-                </button>
-              </div>
-            </div>
-            <select
-              id="witness-video-select"
-              className="app__select"
-              value={selectedWitnessVideoUrl}
-              onChange={(event) => setSelectedWitnessVideoUrl(event.target.value)}
-              disabled={witnessVideos.length === 0}
-            >
-              {witnessVideos.length === 0 ? <option value="">No witness videos</option> : null}
-              {witnessVideos.map((video) => (
-                <option key={video.mediaUrl} value={video.mediaUrl}>
-                  {video.fileName}
-                </option>
-              ))}
-            </select>
+                </Button>
+              </Box>
+            </Stack>
+            <FormControl fullWidth sx={{ marginTop: 1 }}>
+              <InputLabel id="witness-video-select-label">Witness video</InputLabel>
+              <Select
+                labelId="witness-video-select-label"
+                id="witness-video-select"
+                label="Witness video"
+                value={selectedWitnessVideoUrl}
+                onChange={(event) => setSelectedWitnessVideoUrl(event.target.value)}
+                disabled={witnessVideos.length === 0}
+              >
+                {witnessVideos.length === 0 ? <MenuItem value="">No witness videos</MenuItem> : null}
+                {witnessVideos.map((video) => (
+                  <MenuItem key={video.mediaUrl} value={video.mediaUrl}>
+                    {video.fileName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             {selectedWitnessVideoUrl ? (
-              <video className="app__witness-video" controls preload="metadata" src={selectedWitnessVideoUrl}>
+              <Box
+                component="video"
+                controls
+                preload="metadata"
+                src={selectedWitnessVideoUrl}
+                sx={{
+                  width: '100%',
+                  marginTop: 0.75,
+                  borderRadius: '10px',
+                  background: '#000',
+                }}
+              >
                 <track kind="captions" srcLang="en" label="No captions available" />
-              </video>
+              </Box>
             ) : (
-              <p className="app__status">No witness video available for this film.</p>
+              <Typography color="text.secondary" sx={{ marginTop: 1 }}>
+                No witness video available for this film.
+              </Typography>
             )}
-          </div>
-        </section>
-      </main>
+          </Box>
+        </Paper>
+      </Box>
 
       <Dialog
         open={isCreateFilmDialogOpen}
@@ -677,10 +871,25 @@ export const App = () => {
         </Alert>
       </Snackbar>
 
-      <footer className="app-footer">
-        <p>Tiogars 2026</p>
-        <p>Frontend served through Vite and Nginx development proxy.</p>
-      </footer>
-    </div>
+      <Box
+        component="footer"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 1,
+          padding: '0 1rem 1rem',
+          color: '#546e7a',
+          fontSize: '0.95rem',
+          flexDirection: { xs: 'column', md: 'row' },
+        }}
+      >
+        <Typography variant="body2" sx={{ margin: 0 }}>
+          Tiogars 2026
+        </Typography>
+        <Typography variant="body2" sx={{ margin: 0 }}>
+          Frontend served through Vite and Nginx development proxy.
+        </Typography>
+      </Box>
+    </Box>
   );
 };

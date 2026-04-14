@@ -1,6 +1,4 @@
-import { Box, Container, Stack, Typography } from '@mui/material';
-
-import './Footer.css';
+import { Box, Container, Link, Stack, Typography } from '@mui/material';
 
 export function Footer() {
   return (

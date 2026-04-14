@@ -15,7 +15,6 @@ import {
   Typography,
 } from '@mui/material';
 
-import './Header.css';
 import type { HeaderProps } from './Header.types';
 
 export function Header({
@@ -28,7 +27,7 @@ export function Header({
     <AppBar position="sticky" color="transparent" elevation={0}>
       <Toolbar sx={{ gap: 2, backdropFilter: 'blur(12px)' }}>
         <AutoAwesomeMotionOutlinedIcon color="primary" />
-        <Typography variant="h6" noWrap className="header-title" sx={{ flexGrow: 1 }}>
+        <Typography variant="h6" noWrap sx={{ flexGrow: 1, letterSpacing: '0.02em' }}>
           Template Repository Dashboard
         </Typography>
         <Tooltip title="Seeded favorite">
