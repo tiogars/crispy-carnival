@@ -12,7 +12,7 @@ services:
     environment:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
-      - ./server/data/films:/data/films:ro
+      - ./server/data/films:/data/films
     restart: unless-stopped
 
   proxy:
@@ -59,7 +59,7 @@ services:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
       - ./server/app:/app/app
-      - ./server/data/films:/data/films:ro
+      - ./server/data/films:/data/films
     restart: unless-stopped
 
   proxy-dev:

@@ -95,6 +95,29 @@
   margin-top: 0.5rem;
 }
 
+.app__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.app__button {
+  border: 1px solid #0d47a1;
+  border-radius: 999px;
+  background: #0d47a1;
+  color: #ffffff;
+  font-weight: 600;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  cursor: pointer;
+}
+
+.app__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .app__select {
   width: 100%;
   min-height: 2.25rem;

@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -34,6 +35,15 @@ class ReelsResponse(BaseModel):
 class FramesResponse(BaseModel):
     reelId: str
     frames: list[str]
+
+
+class CreateFilmRequest(BaseModel):
+    displayName: str
+    firstReelName: str | None = None
+
+
+class CreateFilmResponse(BaseModel):
+    film: FilmItem
 
 
 app = FastAPI(
@@ -98,6 +108,28 @@ def _count_image_files(folder: Path) -> int:
     return count
 
 
+def _format_film_display_name(film_id: str) -> str:
+    return film_id.replace('_', ' ').title()
+
+
+def _build_film_id(display_name: str) -> str:
+    normalized = re.sub(r'[^a-zA-Z0-9]+', '_', display_name.strip().lower()).strip('_')
+
+    if not normalized:
+        raise ValueError('Film name must contain letters or numbers.')
+
+    return normalized
+
+
+def _build_reel_id(reel_name: str) -> str:
+    normalized = re.sub(r'[^a-zA-Z0-9]+', '_', reel_name.strip().lower()).strip('_')
+
+    if not normalized:
+        raise ValueError('First reel name must contain letters or numbers.')
+
+    return normalized
+
+
 @app.get('/health')
 def get_health() -> dict[str, str]:
     return {'status': 'ok'}
@@ -111,8 +143,51 @@ def get_films() -> FilmsResponse:
     films = sorted([child for child in FILM_LIBRARY_ROOT.iterdir() if child.is_dir()], key=lambda path: path.name.lower())
 
     return FilmsResponse(
-        films=[FilmItem(id=film.name, displayName=film.name.replace('_', ' ').title()) for film in films]
+        films=[FilmItem(id=film.name, displayName=_format_film_display_name(film.name)) for film in films]
     )
+
+
+@app.post(
+    '/api/filesystem/films',
+    status_code=201,
+    responses={
+        400: {'description': 'Invalid film name.'},
+        409: {'description': 'Film already exists.'},
+        500: {'description': 'error during film creation'},
+    },
+)
+def create_film(payload: CreateFilmRequest) -> CreateFilmResponse:
+    try:
+        film_id = _build_film_id(payload.displayName)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    try:
+        FILM_LIBRARY_ROOT.mkdir(parents=True, exist_ok=True)
+
+        film_path = _safe_join(FILM_LIBRARY_ROOT, film_id)
+
+        if film_path.exists():
+            raise HTTPException(status_code=409, detail='A film with this name already exists.')
+
+        film_path.mkdir(parents=False, exist_ok=False)
+
+        if payload.firstReelName:
+            try:
+                reel_id = _build_reel_id(payload.firstReelName)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+
+            reel_path = _safe_join(film_path, reel_id)
+            reel_path.mkdir(parents=False, exist_ok=False)
+
+        return CreateFilmResponse(
+            film=FilmItem(id=film_id, displayName=_format_film_display_name(film_id))
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail='error during film creation') from error
 
 
 @app.get('/api/filesystem/films/{film_id}/reels', response_model=ReelsResponse)

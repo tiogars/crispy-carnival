@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import Alert from '@mui/material/Alert';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import Snackbar from '@mui/material/Snackbar';
 import { Player } from '@remotion/player';
+import { useForm } from 'react-hook-form';
 
 import { FilmSequenceComposition } from '../features/film-viewer/FilmSequenceComposition';
 
@@ -22,6 +26,20 @@ type ReelFramesResponse = {
   frames: string[];
 };
 
+type CreateFilmRequest = {
+  displayName: string;
+  firstReelName?: string;
+};
+
+type CreateFilmResponse = {
+  film: Film;
+};
+
+type NewFilmFormValues = {
+  displayName: string;
+  firstReelName: string;
+};
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 const documentationUrl =
   import.meta.env.VITE_DOCUMENTATION_URL ?? 'http://localhost:8000';
@@ -38,6 +56,33 @@ const fetchJson = async <T,>(path: string): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
+const postJson = async <T,>(path: string, body: unknown): Promise<T> => {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let message = `API request failed: ${response.status}`;
+
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        message = payload.detail;
+      }
+    } catch {
+      // Use the fallback status-based message when no JSON payload is available.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<T>;
+};
+
 export const App = () => {
   const [films, setFilms] = useState<Film[]>([]);
   const [selectedFilmId, setSelectedFilmId] = useState<string>('');
@@ -45,29 +90,77 @@ export const App = () => {
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [frameUrls, setFrameUrls] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isCreateFilmDialogOpen, setCreateFilmDialogOpen] = useState<boolean>(false);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<NewFilmFormValues>({
+    defaultValues: {
+      displayName: '',
+      firstReelName: '',
+    },
+  });
+
+  const loadFilms = useCallback(async (preferredFilmId?: string) => {
+    setIsLoading(true);
+    setErrorMessage('');
+
+    try {
+      const payload = await fetchJson<{ films: Film[] }>('/api/filesystem/films');
+      setFilms(payload.films);
+
+      if (payload.films.length === 0) {
+        setSelectedFilmId('');
+        return;
+      }
+
+      setSelectedFilmId((currentFilmId) => {
+        if (preferredFilmId && payload.films.some((film) => film.id === preferredFilmId)) {
+          return preferredFilmId;
+        }
+
+        if (currentFilmId && payload.films.some((film) => film.id === currentFilmId)) {
+          return currentFilmId;
+        }
+
+        return payload.films[0].id;
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load films.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadFilms = async () => {
-      setIsLoading(true);
-      setErrorMessage('');
-
-      try {
-        const payload = await fetchJson<{ films: Film[] }>('/api/filesystem/films');
-        setFilms(payload.films);
-
-        if (payload.films.length > 0) {
-          setSelectedFilmId(payload.films[0].id);
-        }
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to load films.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     void loadFilms();
-  }, []);
+  }, [loadFilms]);
+
+  const closeCreateFilmDialog = () => {
+    setCreateFilmDialogOpen(false);
+    reset({ displayName: '', firstReelName: '' });
+  };
+
+  const submitCreateFilm = handleSubmit(async (values) => {
+    setErrorMessage('');
+
+    try {
+      const payload = await postJson<CreateFilmResponse>('/api/filesystem/films', {
+        displayName: values.displayName,
+        firstReelName: values.firstReelName.trim() ? values.firstReelName : undefined,
+      } satisfies CreateFilmRequest);
+      await loadFilms(payload.film.id);
+      setSuccessMessage(`Film "${payload.film.displayName}" created successfully.`);
+      closeCreateFilmDialog();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create film.';
+      setErrorMessage(message.includes('500') ? 'error during film creation' : message);
+    }
+  });
 
   useEffect(() => {
     if (!selectedFilmId) {
@@ -158,9 +251,19 @@ export const App = () => {
 
       <main className="app">
         <section className="app__panel">
-          <label className="app__label" htmlFor="film-select">
-            Film
-          </label>
+          <div className="app__label-row">
+            <label className="app__label" htmlFor="film-select">
+              Film
+            </label>
+            <button
+              type="button"
+              className="app__button"
+              onClick={() => setCreateFilmDialogOpen(true)}
+              disabled={isLoading}
+            >
+              Add film
+            </button>
+          </div>
           <select
             id="film-select"
             className="app__select"
@@ -213,6 +316,61 @@ export const App = () => {
           />
         </section>
       </main>
+
+      <Dialog
+        open={isCreateFilmDialogOpen}
+        onClose={closeCreateFilmDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Add a new film</DialogTitle>
+        <Box component="form" noValidate onSubmit={submitCreateFilm}>
+          <DialogContent dividers>
+            <TextField
+              autoFocus
+              fullWidth
+              label="Film name"
+              placeholder="Example: The Third Man"
+              error={Boolean(errors.displayName)}
+              helperText={errors.displayName?.message}
+              {...register('displayName', {
+                required: 'Film name is required.',
+                minLength: {
+                  value: 2,
+                  message: 'Film name must have at least 2 characters.',
+                },
+              })}
+            />
+            <TextField
+              fullWidth
+              margin="normal"
+              label="First reel folder (optional)"
+              placeholder="Example: Reel 01"
+              helperText="If provided, this reel folder is created inside the film directory."
+              {...register('firstReelName')}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeCreateFilmDialog} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={isSubmitting}>
+              Create film
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(successMessage)}
+        autoHideDuration={3000}
+        onClose={() => setSuccessMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={() => setSuccessMessage('')} severity="success" variant="filled">
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       <footer className="app-footer">
         <p>Tiogars 2026</p>
