@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 400" font-family="Inter, Segoe UI, sans-serif">
+  <!-- Dim overlay -->
+  <rect width="560" height="400" fill="rgba(0,0,0,0.48)"/>
+
+  <!-- Dialog box -->
+  <rect x="80" y="60" width="400" height="290" rx="12" fill="#ffffff" filter="drop-shadow(0 8px 32px rgba(0,0,0,0.22))"/>
+
+  <!-- Dialog title -->
+  <text x="104" y="100" font-size="18" font-weight="600" fill="#1a2a3a">Add a new film</text>
+  <line x1="80" y1="112" x2="480" y2="112" stroke="#e0e7ef" stroke-width="1"/>
+
+  <!-- Film name field -->
+  <text x="104" y="142" font-size="12" fill="#546e7a">Film name *</text>
+  <rect x="104" y="150" width="352" height="42" rx="6" fill="#fff" stroke="#0d47a1" stroke-width="2"/>
+  <text x="118" y="177" font-size="14" fill="#1a2a3a">The Third Man</text>
+
+  <!-- First reel field -->
+  <text x="104" y="216" font-size="12" fill="#546e7a">First reel folder (optional)</text>
+  <rect x="104" y="224" width="352" height="42" rx="6" fill="#fff" stroke="#c6ced8" stroke-width="1"/>
+  <text x="118" y="251" font-size="14" fill="#9aa5b1">Example: Reel 01</text>
+  <text x="104" y="280" font-size="11" fill="#78909c">If provided, this reel folder is created inside the film directory.</text>
+
+  <!-- Action row -->
+  <line x1="80" y1="295" x2="480" y2="295" stroke="#e0e7ef" stroke-width="1"/>
+  <rect x="310" y="308" width="80" height="32" rx="6" fill="none" stroke="#c6ced8" stroke-width="1"/>
+  <text x="350" y="329" font-size="13" fill="#546e7a" text-anchor="middle">Cancel</text>
+  <rect x="400" y="308" width="62" height="32" rx="6" fill="#0d47a1"/>
+  <text x="431" y="329" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">Create</text>
+</svg>
