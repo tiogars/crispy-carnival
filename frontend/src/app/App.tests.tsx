@@ -317,7 +317,7 @@ describe('App create film modal', () => {
     const user = userEvent.setup();
 
     await screen.findByRole('link', { name: 'Open direct file' });
-    await user.click(screen.getByRole('button', { name: 'Supprimer la video temoin selectionnee' }));
+    await user.click(screen.getByRole('button', { name: 'Supprimer la vidéo témoin sélectionnée' }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await screen.findByText('Witness video "witness.mp4" deleted successfully.');

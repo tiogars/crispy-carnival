@@ -43,6 +43,8 @@ nav:
       - Overview: 4-user-manual/index.md
       - Film Browser: 4-user-manual/4.1-film-browser/index.md
       - API Operations: 4-user-manual/4.2-api-operations/index.md
+      - Film Management: 4-user-manual/4.3-film-management/index.md
+      - Witness Video Management: 4-user-manual/4.4-witness-video-management/index.md
 
 theme:
   custom_dir: docs/settings/overrides

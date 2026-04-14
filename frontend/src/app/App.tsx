@@ -513,7 +513,7 @@ export const App = () => {
                   onClick={() => setDeleteWitnessDialogOpen(true)}
                   disabled={isDeletingWitnessVideo || !selectedWitnessVideoEntry}
                 >
-                  Supprimer la video temoin selectionnee
+                  Supprimer la vidéo témoin sélectionnée
                 </button>
               </div>
             </div>

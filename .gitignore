@@ -6,3 +6,6 @@ package-lock.json
 .pnpm-store/
 site_output/
 server/data/
+
+__pycache__/
+*.pyc

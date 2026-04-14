@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 360" font-family="Inter, Segoe UI, sans-serif">
+  <!-- Dim overlay -->
+  <rect width="560" height="360" fill="rgba(0,0,0,0.48)"/>
+
+  <!-- Dialog box -->
+  <rect x="80" y="40" width="400" height="280" rx="12" fill="#ffffff" filter="drop-shadow(0 8px 32px rgba(0,0,0,0.22))"/>
+
+  <!-- Dialog title -->
+  <text x="104" y="80" font-size="18" font-weight="600" fill="#1a2a3a">Upload witness video</text>
+  <line x1="80" y1="92" x2="480" y2="92" stroke="#e0e7ef" stroke-width="1"/>
+
+  <!-- File input -->
+  <rect x="104" y="110" width="352" height="50" rx="6" fill="#f8fbff" stroke="#c6ced8" stroke-width="1"/>
+  <text x="118" y="131" font-size="12" fill="#546e7a">Choose file…</text>
+  <text x="118" y="150" font-size="11" fill="#9aa5b1">witness_20240312.mp4  (selected)</text>
+
+  <text x="104" y="180" font-size="11" fill="#78909c">The file will be saved inside the selected film under _witness_videos/.</text>
+
+  <!-- Overwrite checkbox -->
+  <rect x="104" y="196" width="14" height="14" rx="3" fill="#0d47a1"/>
+  <text x="109" y="207" font-size="10" fill="#fff" text-anchor="middle">✓</text>
+  <text x="126" y="208" font-size="13" fill="#1a2a3a">Overwrite existing file if name already exists</text>
+
+  <!-- Action row -->
+  <line x1="80" y1="258" x2="480" y2="258" stroke="#e0e7ef" stroke-width="1"/>
+  <rect x="304" y="270" width="80" height="32" rx="6" fill="none" stroke="#c6ced8" stroke-width="1"/>
+  <text x="344" y="291" font-size="13" fill="#546e7a" text-anchor="middle">Cancel</text>
+  <rect x="394" y="270" width="66" height="32" rx="6" fill="#0d47a1"/>
+  <text x="427" y="291" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">Upload</text>
+</svg>
