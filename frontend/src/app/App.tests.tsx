@@ -55,8 +55,16 @@ describe('App create film modal', () => {
         return Promise.resolve(jsonResponse({ reels: [] }));
       }
 
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
       if (method === 'GET' && path === '/api/filesystem/films/new_film/reels') {
         return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/new_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
       }
 
       if (method === 'POST' && path === '/api/filesystem/films') {
@@ -116,6 +124,10 @@ describe('App create film modal', () => {
         return Promise.resolve(jsonResponse({ reels: [] }));
       }
 
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
       if (method === 'POST' && path === '/api/filesystem/films') {
         return Promise.resolve(
           jsonResponse(
@@ -158,6 +170,10 @@ describe('App create film modal', () => {
         return Promise.resolve(jsonResponse({ reels: [] }));
       }
 
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
       if (method === 'POST' && path === '/api/filesystem/films') {
         return Promise.resolve(new Response('internal error', { status: 500 }));
       }
@@ -174,5 +190,144 @@ describe('App create film modal', () => {
     await user.click(screen.getByRole('button', { name: 'Create film' }));
 
     await screen.findByText('error during film creation');
+  });
+
+  it('uploads a witness video for the selected film from the dedicated modal', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      const witnessVideosCalls = fetchMock.mock.calls.filter(
+        ([url, requestInit]) =>
+          String(url) === '/api/filesystem/films/existing_film/witness-videos' && (requestInit?.method ?? 'GET') === 'GET',
+      ).length;
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        return Promise.resolve(
+          jsonResponse({
+            films: [{ id: 'existing_film', displayName: 'Existing Film' }],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        if (witnessVideosCalls > 1) {
+          return Promise.resolve(
+            jsonResponse({
+              videos: [
+                {
+                  fileName: 'witness.mp4',
+                  mediaUrl: '/media/existing_film/_witness_videos/witness.mp4',
+                },
+              ],
+            }),
+          );
+        }
+
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'POST' && path === '/api/filesystem/films/existing_film/witness-video') {
+        return Promise.resolve(
+          jsonResponse({
+            fileName: 'witness.mp4',
+            mediaUrl: '/media/existing_film/_witness_videos/witness.mp4',
+          }, 201),
+        );
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Upload witness video' }));
+
+    const file = new File(['fake-video'], 'witness.mp4', { type: 'video/mp4' });
+    await user.upload(screen.getByTestId('witness-video-input'), file);
+    await user.click(screen.getByRole('button', { name: 'Upload' }));
+
+    await screen.findByText('Witness video "witness.mp4" uploaded successfully.');
+    await screen.findByRole('link', { name: 'Open direct file' });
+
+    const uploadCall = fetchMock.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === '/api/filesystem/films/existing_film/witness-video' && requestInit?.method === 'POST',
+    );
+
+    expect(uploadCall).toBeDefined();
+    expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData);
+
+    const uploadBody = uploadCall?.[1]?.body as FormData;
+    expect(uploadBody.get('overwrite')).toBe('false');
+  });
+
+  it('deletes selected witness video after confirmation from preview area', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      const witnessVideosCalls = fetchMock.mock.calls.filter(
+        ([url, requestInit]) =>
+          String(url) === '/api/filesystem/films/existing_film/witness-videos' && (requestInit?.method ?? 'GET') === 'GET',
+      ).length;
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        return Promise.resolve(
+          jsonResponse({
+            films: [{ id: 'existing_film', displayName: 'Existing Film' }],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        if (witnessVideosCalls > 1) {
+          return Promise.resolve(jsonResponse({ videos: [] }));
+        }
+
+        return Promise.resolve(
+          jsonResponse({
+            videos: [
+              {
+                fileName: 'witness.mp4',
+                mediaUrl: '/media/existing_film/_witness_videos/witness.mp4',
+              },
+            ],
+          }),
+        );
+      }
+
+      if (method === 'DELETE' && path === '/api/filesystem/films/existing_film/witness-videos/witness.mp4') {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await screen.findByRole('link', { name: 'Open direct file' });
+    await user.click(screen.getByRole('button', { name: 'Supprimer la video temoin selectionnee' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await screen.findByText('Witness video "witness.mp4" deleted successfully.');
+
+    const deleteCall = fetchMock.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === '/api/filesystem/films/existing_film/witness-videos/witness.mp4' && requestInit?.method === 'DELETE',
+    );
+
+    expect(deleteCall).toBeDefined();
+    expect(screen.queryByRole('link', { name: 'Open direct file' })).toBeNull();
   });
 });

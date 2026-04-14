@@ -1,9 +1,11 @@
 import os
 import re
+import shutil
 from pathlib import Path
+from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -12,6 +14,8 @@ from pydantic import BaseModel
 BASE_DIR = Path(__file__).resolve().parent.parent
 FILM_LIBRARY_ROOT = Path(os.getenv('FILM_LIBRARY_ROOT', str(BASE_DIR / 'data' / 'films'))).expanduser().resolve()
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'}
+VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'}
+WITNESS_VIDEOS_DIRNAME = '_witness_videos'
 
 
 class FilmItem(BaseModel):
@@ -44,6 +48,15 @@ class CreateFilmRequest(BaseModel):
 
 class CreateFilmResponse(BaseModel):
     film: FilmItem
+
+
+class UploadWitnessVideoResponse(BaseModel):
+    fileName: str
+    mediaUrl: str
+
+
+class WitnessVideosResponse(BaseModel):
+    videos: list[UploadWitnessVideoResponse]
 
 
 app = FastAPI(
@@ -106,6 +119,23 @@ def _count_image_files(folder: Path) -> int:
                 count += 1
 
     return count
+
+
+def _list_video_filenames(folder: Path) -> list[str]:
+    names: list[str] = []
+
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+
+            _, ext = os.path.splitext(entry.name)
+
+            if ext.lower() in VIDEO_SUFFIXES:
+                names.append(entry.name)
+
+    names.sort(key=str.lower)
+    return names
 
 
 def _format_film_display_name(film_id: str) -> str:
@@ -227,3 +257,101 @@ def get_reel_frames(film_id: str, reel_id: str) -> FramesResponse:
     ]
 
     return FramesResponse(reelId=reel_id, frames=frames)
+
+
+@app.post(
+    '/api/filesystem/films/{film_id}/witness-video',
+    status_code=201,
+    responses={
+        400: {'description': 'Invalid file payload.'},
+        404: {'description': 'Film not found.'},
+        409: {'description': 'A witness video with this name already exists.'},
+        500: {'description': 'Error during witness video upload.'},
+    },
+)
+def upload_witness_video(
+    film_id: str,
+    file: Annotated[UploadFile, File(...)],
+    overwrite: Annotated[bool, Form()] = False,
+) -> UploadWitnessVideoResponse:
+    film_path = _safe_join(FILM_LIBRARY_ROOT, film_id)
+
+    if not film_path.exists() or not film_path.is_dir():
+        raise HTTPException(status_code=404, detail='Film not found.')
+
+    file_name = Path(file.filename or '').name
+
+    if not file_name:
+        raise HTTPException(status_code=400, detail='A witness video file is required.')
+
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+    witness_videos_path.mkdir(parents=False, exist_ok=True)
+
+    target_path = _safe_join(witness_videos_path, file_name)
+
+    if target_path.exists() and not overwrite:
+        raise HTTPException(status_code=409, detail='A witness video with this name already exists.')
+
+    try:
+        with target_path.open('wb') as output_stream:
+            shutil.copyfileobj(file.file, output_stream)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail='Error during witness video upload.') from error
+    finally:
+        file.file.close()
+
+    return UploadWitnessVideoResponse(
+        fileName=file_name,
+        mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
+    )
+
+
+@app.get(
+    '/api/filesystem/films/{film_id}/witness-videos',
+    response_model=WitnessVideosResponse,
+    responses={
+        404: {'description': 'Film not found.'},
+    },
+)
+def get_witness_videos(film_id: str) -> WitnessVideosResponse:
+    film_path = _safe_join(FILM_LIBRARY_ROOT, film_id)
+
+    if not film_path.exists() or not film_path.is_dir():
+        raise HTTPException(status_code=404, detail='Film not found.')
+
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+
+    if not witness_videos_path.exists() or not witness_videos_path.is_dir():
+        return WitnessVideosResponse(videos=[])
+
+    videos = [
+        UploadWitnessVideoResponse(
+            fileName=file_name,
+            mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
+        )
+        for file_name in _list_video_filenames(witness_videos_path)
+    ]
+
+    return WitnessVideosResponse(videos=videos)
+
+
+@app.delete(
+    '/api/filesystem/films/{film_id}/witness-videos/{file_name}',
+    status_code=204,
+    responses={
+        404: {'description': 'Witness video not found.'},
+    },
+)
+def delete_witness_video(film_id: str, file_name: str) -> None:
+    film_path = _safe_join(FILM_LIBRARY_ROOT, film_id)
+
+    if not film_path.exists() or not film_path.is_dir():
+        raise HTTPException(status_code=404, detail='Film not found.')
+
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+    video_path = _safe_join(witness_videos_path, Path(file_name).name)
+
+    if not video_path.exists() or not video_path.is_file():
+        raise HTTPException(status_code=404, detail='Witness video not found.')
+
+    video_path.unlink()

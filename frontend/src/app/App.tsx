@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import Alert from '@mui/material/Alert';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, TextField } from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import { Player } from '@remotion/player';
 import { useForm } from 'react-hook-form';
@@ -33,6 +33,15 @@ type CreateFilmRequest = {
 
 type CreateFilmResponse = {
   film: Film;
+};
+
+type UploadWitnessVideoResponse = {
+  fileName: string;
+  mediaUrl: string;
+};
+
+type WitnessVideosResponse = {
+  videos: UploadWitnessVideoResponse[];
 };
 
 type NewFilmFormValues = {
@@ -83,6 +92,51 @@ const postJson = async <T,>(path: string, body: unknown): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
+const postFormData = async <T,>(path: string, body: FormData): Promise<T> => {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    body,
+  });
+
+  if (!response.ok) {
+    let message = `API request failed: ${response.status}`;
+
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        message = payload.detail;
+      }
+    } catch {
+      // Use the fallback status-based message when no JSON payload is available.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<T>;
+};
+
+const deleteRequest = async (path: string): Promise<void> => {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    let message = `API request failed: ${response.status}`;
+
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        message = payload.detail;
+      }
+    } catch {
+      // Use the fallback status-based message when no JSON payload is available.
+    }
+
+    throw new Error(message);
+  }
+};
+
 export const App = () => {
   const [films, setFilms] = useState<Film[]>([]);
   const [selectedFilmId, setSelectedFilmId] = useState<string>('');
@@ -93,6 +147,14 @@ export const App = () => {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCreateFilmDialogOpen, setCreateFilmDialogOpen] = useState<boolean>(false);
+  const [isUploadWitnessDialogOpen, setUploadWitnessDialogOpen] = useState<boolean>(false);
+  const [selectedWitnessVideo, setSelectedWitnessVideo] = useState<File | null>(null);
+  const [isUploadingWitnessVideo, setUploadingWitnessVideo] = useState<boolean>(false);
+  const [overwriteWitnessVideo, setOverwriteWitnessVideo] = useState<boolean>(false);
+  const [witnessVideos, setWitnessVideos] = useState<UploadWitnessVideoResponse[]>([]);
+  const [selectedWitnessVideoUrl, setSelectedWitnessVideoUrl] = useState<string>('');
+  const [isDeleteWitnessDialogOpen, setDeleteWitnessDialogOpen] = useState<boolean>(false);
+  const [isDeletingWitnessVideo, setDeletingWitnessVideo] = useState<boolean>(false);
   const {
     register,
     handleSubmit,
@@ -162,6 +224,109 @@ export const App = () => {
     }
   });
 
+  const closeUploadWitnessDialog = () => {
+    setUploadWitnessDialogOpen(false);
+    setSelectedWitnessVideo(null);
+    setOverwriteWitnessVideo(false);
+  };
+
+  const loadWitnessVideos = useCallback(async (preferredMediaUrl?: string) => {
+    if (!selectedFilmId) {
+      setWitnessVideos([]);
+      setSelectedWitnessVideoUrl('');
+      return;
+    }
+
+    try {
+      const payload = await fetchJson<WitnessVideosResponse>(`/api/filesystem/films/${selectedFilmId}/witness-videos`);
+
+      const resolvedVideos = payload.videos.map((video) => ({
+        ...video,
+        mediaUrl: video.mediaUrl.startsWith('http') ? video.mediaUrl : `${apiBaseUrl}${video.mediaUrl}`,
+      }));
+
+      setWitnessVideos(resolvedVideos);
+      setSelectedWitnessVideoUrl((currentVideoUrl) => {
+        if (preferredMediaUrl && resolvedVideos.some((video) => video.mediaUrl === preferredMediaUrl)) {
+          return preferredMediaUrl;
+        }
+
+        if (currentVideoUrl && resolvedVideos.some((video) => video.mediaUrl === currentVideoUrl)) {
+          return currentVideoUrl;
+        }
+
+        return resolvedVideos[0]?.mediaUrl ?? '';
+      });
+    } catch {
+      setWitnessVideos([]);
+      setSelectedWitnessVideoUrl('');
+    }
+  }, [selectedFilmId]);
+
+  const submitWitnessVideoUpload = async () => {
+    if (!selectedFilmId) {
+      setErrorMessage('Select a film before uploading a witness video.');
+      return;
+    }
+
+    if (!selectedWitnessVideo) {
+      setErrorMessage('Choose a witness video file first.');
+      return;
+    }
+
+    setUploadingWitnessVideo(true);
+    setErrorMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedWitnessVideo);
+      formData.append('overwrite', overwriteWitnessVideo ? 'true' : 'false');
+
+      const payload = await postFormData<UploadWitnessVideoResponse>(
+        `/api/filesystem/films/${selectedFilmId}/witness-video`,
+        formData,
+      );
+
+      const resolvedMediaUrl = payload.mediaUrl.startsWith('http') ? payload.mediaUrl : `${apiBaseUrl}${payload.mediaUrl}`;
+      await loadWitnessVideos(resolvedMediaUrl);
+
+      setSuccessMessage(`Witness video "${payload.fileName}" uploaded successfully.`);
+      closeUploadWitnessDialog();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to upload witness video.');
+    } finally {
+      setUploadingWitnessVideo(false);
+    }
+  };
+
+  const selectedWitnessVideoEntry = useMemo<UploadWitnessVideoResponse | null>(() => {
+    const matched = witnessVideos.find((video) => video.mediaUrl === selectedWitnessVideoUrl);
+    return matched ?? null;
+  }, [selectedWitnessVideoUrl, witnessVideos]);
+
+  const submitWitnessVideoDelete = async () => {
+    if (!selectedFilmId || !selectedWitnessVideoEntry) {
+      setErrorMessage('Select a witness video to delete.');
+      return;
+    }
+
+    setDeletingWitnessVideo(true);
+    setErrorMessage('');
+
+    try {
+      await deleteRequest(
+        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(selectedWitnessVideoEntry.fileName)}`,
+      );
+      await loadWitnessVideos();
+      setSuccessMessage(`Witness video "${selectedWitnessVideoEntry.fileName}" deleted successfully.`);
+      setDeleteWitnessDialogOpen(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete witness video.');
+    } finally {
+      setDeletingWitnessVideo(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedFilmId) {
       setReels([]);
@@ -220,6 +385,10 @@ export const App = () => {
     void loadFrames();
   }, [selectedFilmId, selectedReelId]);
 
+  useEffect(() => {
+    void loadWitnessVideos();
+  }, [loadWitnessVideos]);
+
   const durationInFrames = useMemo<number>(() => {
     return frameUrls.length > 0 ? frameUrls.length : 1;
   }, [frameUrls.length]);
@@ -255,14 +424,24 @@ export const App = () => {
             <label className="app__label" htmlFor="film-select">
               Film
             </label>
-            <button
-              type="button"
-              className="app__button"
-              onClick={() => setCreateFilmDialogOpen(true)}
-              disabled={isLoading}
-            >
-              Add film
-            </button>
+            <div className="app__panel-actions">
+              <button
+                type="button"
+                className="app__button"
+                onClick={() => setCreateFilmDialogOpen(true)}
+                disabled={isLoading}
+              >
+                Add film
+              </button>
+              <button
+                type="button"
+                className="app__button app__button--secondary"
+                onClick={() => setUploadWitnessDialogOpen(true)}
+                disabled={isLoading || !selectedFilmId}
+              >
+                Upload witness video
+              </button>
+            </div>
           </div>
           <select
             id="film-select"
@@ -298,6 +477,7 @@ export const App = () => {
           <p className="app__status">
             {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
           </p>
+          {!selectedFilmId ? <p className="app__status">Select a film to enable witness video upload.</p> : null}
           {errorMessage ? <p className="app__error">{errorMessage}</p> : null}
         </section>
 
@@ -314,6 +494,51 @@ export const App = () => {
             loop
             style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
           />
+          <div className="app__witness-video-panel">
+            <div className="app__label-row">
+              <label className="app__label" htmlFor="witness-video-select">
+                Witness video
+              </label>
+              <div className="app__witness-video-actions">
+                {selectedWitnessVideoUrl ? (
+                  <a className="app__witness-video-link" href={selectedWitnessVideoUrl} target="_blank" rel="noreferrer">
+                    Open direct file
+                  </a>
+                ) : (
+                  <span className="app__status">No direct file available.</span>
+                )}
+                <button
+                  type="button"
+                  className="app__button app__button--danger"
+                  onClick={() => setDeleteWitnessDialogOpen(true)}
+                  disabled={isDeletingWitnessVideo || !selectedWitnessVideoEntry}
+                >
+                  Supprimer la video temoin selectionnee
+                </button>
+              </div>
+            </div>
+            <select
+              id="witness-video-select"
+              className="app__select"
+              value={selectedWitnessVideoUrl}
+              onChange={(event) => setSelectedWitnessVideoUrl(event.target.value)}
+              disabled={witnessVideos.length === 0}
+            >
+              {witnessVideos.length === 0 ? <option value="">No witness videos</option> : null}
+              {witnessVideos.map((video) => (
+                <option key={video.mediaUrl} value={video.mediaUrl}>
+                  {video.fileName}
+                </option>
+              ))}
+            </select>
+            {selectedWitnessVideoUrl ? (
+              <video className="app__witness-video" controls preload="metadata" src={selectedWitnessVideoUrl}>
+                <track kind="captions" srcLang="en" label="No captions available" />
+              </video>
+            ) : (
+              <p className="app__status">No witness video available for this film.</p>
+            )}
+          </div>
         </section>
       </main>
 
@@ -359,6 +584,86 @@ export const App = () => {
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteWitnessDialogOpen}
+        onClose={() => {
+          if (!isDeletingWitnessVideo) {
+            setDeleteWitnessDialogOpen(false);
+          }
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Confirm witness video deletion</DialogTitle>
+        <DialogContent dividers>
+          <p>
+            Delete witness video "{selectedWitnessVideoEntry?.fileName ?? ''}"?
+          </p>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteWitnessDialogOpen(false)} disabled={isDeletingWitnessVideo}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            color="error"
+            variant="contained"
+            onClick={() => {
+              void submitWitnessVideoDelete();
+            }}
+            disabled={isDeletingWitnessVideo || !selectedWitnessVideoEntry}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={isUploadWitnessDialogOpen}
+        onClose={closeUploadWitnessDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Upload witness video</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            type="file"
+            slotProps={{ htmlInput: { accept: 'video/*', 'data-testid': 'witness-video-input' } }}
+            onChange={(event) => {
+              const input = event.target as HTMLInputElement;
+              const file = input.files?.[0] ?? null;
+              setSelectedWitnessVideo(file);
+            }}
+            helperText="The file will be saved inside the selected film under _witness_videos/."
+          />
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={overwriteWitnessVideo}
+                onChange={(event) => setOverwriteWitnessVideo(event.target.checked)}
+              />
+            )}
+            label="Overwrite existing file if name already exists"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeUploadWitnessDialog} disabled={isUploadingWitnessVideo}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            onClick={() => {
+              void submitWitnessVideoUpload();
+            }}
+            disabled={isUploadingWitnessVideo || !selectedWitnessVideo}
+          >
+            Upload
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar
