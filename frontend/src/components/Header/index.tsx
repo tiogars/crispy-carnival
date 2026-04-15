@@ -1,3 +1,4 @@
+import ApiOutlinedIcon from '@mui/icons-material/ApiOutlined';
 import AutoAwesomeMotionOutlinedIcon from '@mui/icons-material/AutoAwesomeMotionOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -22,6 +23,8 @@ export function Header({
   showSeededFavorite,
   onToggleTheme,
   onToggleSeededFavorite,
+  documentationHref = '/docs/',
+  swaggerUrl,
 }: Readonly<HeaderProps>) {
   return (
     <AppBar position="sticky" color="transparent" elevation={0}>
@@ -30,21 +33,25 @@ export function Header({
         <Typography variant="h6" noWrap sx={{ flexGrow: 1, letterSpacing: '0.02em' }}>
           Template Repository Dashboard
         </Typography>
-        <Tooltip title="Seeded favorite">
-          <Box component="span" sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
-            <Switch
-              checked={showSeededFavorite}
-              onChange={onToggleSeededFavorite}
-              size="small"
-              slotProps={{ input: { 'aria-label': 'Toggle seeded favorite' } }}
-            />
-          </Box>
-        </Tooltip>
-        <FormControlLabel
-          control={<Switch checked={showSeededFavorite} onChange={onToggleSeededFavorite} />}
-          label="Seeded favorite"
-          sx={{ display: { xs: 'none', md: 'flex' }, mr: 0 }}
-        />
+        {showSeededFavorite !== undefined && onToggleSeededFavorite && (
+          <Tooltip title="Seeded favorite">
+            <Box component="span" sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+              <Switch
+                checked={showSeededFavorite}
+                onChange={onToggleSeededFavorite}
+                size="small"
+                slotProps={{ input: { 'aria-label': 'Toggle seeded favorite' } }}
+              />
+            </Box>
+          </Tooltip>
+        )}
+        {showSeededFavorite !== undefined && onToggleSeededFavorite && (
+          <FormControlLabel
+            control={<Switch checked={showSeededFavorite} onChange={onToggleSeededFavorite} />}
+            label="Seeded favorite"
+            sx={{ display: { xs: 'none', md: 'flex' }, mr: 0 }}
+          />
+        )}
         <Box>
           <IconButton
             aria-label="Open GitHub repository"
@@ -66,14 +73,28 @@ export function Header({
           >
             <BugReportOutlinedIcon />
           </IconButton>
-          <IconButton aria-label="Toggle theme" color="inherit" onClick={onToggleTheme}>
-            {themeMode === 'light' ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
-          </IconButton>
+          {themeMode && onToggleTheme && (
+            <IconButton aria-label="Toggle theme" color="inherit" onClick={onToggleTheme}>
+              {themeMode === 'light' ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
+            </IconButton>
+          )}
+          {swaggerUrl && (
+            <IconButton
+              aria-label="Open Swagger API"
+              color="inherit"
+              component="a"
+              href={swaggerUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ApiOutlinedIcon />
+            </IconButton>
+          )}
           <IconButton
             aria-label="Open documentation"
             color="inherit"
             component="a"
-            href="/docs/"
+            href={documentationHref}
           >
             <DescriptionOutlinedIcon />
           </IconButton>
