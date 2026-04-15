@@ -1,15 +1,21 @@
-name: crispy-carnival
+name: crispy-carnival-local
 
 services:
   frontend:
-    image: localhost:5000/crispy-carnival-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
 
   api:
-    image: localhost:5000/crispy-carnival-api:latest
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     environment:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
+      - ./server/app:/app/app
       - ./server/data/films:/data/films
     restart: unless-stopped
 

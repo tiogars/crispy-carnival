@@ -5,13 +5,15 @@ This section describes the Docker Compose runtime variants.
 ## Compose files
 
 - `docker-compose.yml`: runs prebuilt images from GitHub Container Registry.
-- `docker-compose-local.yml`: runs images from a local registry (`localhost:5000`).
+- `docker-compose-local.yml`: builds frontend/api locally and runs the stack.
 - `docker-compose-dev.yml`: runs hot-reload services against local source code.
 
-All files define the same stack name:
+Compose stack names:
 
 ```yaml
-name: crispy-carnival
+docker-compose.yml       -> name: crispy-carnival
+docker-compose-local.yml -> name: crispy-carnival-local
+docker-compose-dev.yml   -> name: crispy-carnival-dev
 ```
 
 ## Services
@@ -43,17 +45,13 @@ App URL: `http://localhost:3000`
 docker compose -f docker-compose.yml down
 ```
 
-## Start the stack (local registry images)
+## Start the stack (local build images)
 
 ```bash
 docker compose -f docker-compose-local.yml up -d
 ```
 
-Use this mode after pushing local builds to your registry:
-
-- `localhost:5000/crispy-carnival-frontend:latest`
-- `localhost:5000/crispy-carnival-api:latest`
-- `localhost:5000/crispy-carnival-proxy:latest`
+This mode builds `frontend` and `api` from local Dockerfiles before starting.
 
 ## Hot-reload development stack
 

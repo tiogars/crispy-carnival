@@ -1,4 +1,4 @@
-name: crispy-carnival
+name: crispy-carnival-dev
 
 services:
   frontend:
