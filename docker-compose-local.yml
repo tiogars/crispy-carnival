@@ -11,7 +11,6 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     environment:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
@@ -20,7 +19,9 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: localhost:5000/crispy-carnival-proxy:latest
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
     depends_on:
       - frontend
       - api
