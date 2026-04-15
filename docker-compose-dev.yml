@@ -5,7 +5,7 @@ services:
     image: node:22-alpine
     working_dir: /workspace
     init: true
-    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm build && pnpm preview --host 0.0.0.0 --port 5173 --strictPort"
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host 0.0.0.0 --port 5173 --strictPort"
     environment:
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "300"
@@ -16,11 +16,11 @@ services:
     ports:
       - "5173:5173"
     healthcheck:
-      test: ["CMD", "node", "-e", "const net=require('net'); const socket=net.connect(5173, '127.0.0.1'); socket.setTimeout(3000); socket.on('connect', () => { socket.end(); process.exit(0); }); socket.on('timeout', () => { socket.destroy(); process.exit(1); }); socket.on('error', () => process.exit(1));"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 45s
+      test: ["CMD", "node", "-e", "const http=require('http'); const req=http.get({hostname:'127.0.0.1',port:5173,path:'/',timeout:10000}, (res)=>{ process.exit(res.statusCode < 500 ? 0 : 1); }); req.on('error',()=>process.exit(1)); req.on('timeout',()=>{ req.destroy(); process.exit(1); });"]
+      interval: 15s
+      timeout: 15s
+      retries: 20
+      start_period: 120s
     restart: unless-stopped
 
   api:

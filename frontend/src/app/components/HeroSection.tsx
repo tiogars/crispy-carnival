@@ -21,9 +21,6 @@ export const HeroSection = () => {
       >
         Film Sequence Finder
       </Typography>
-      <Typography variant="h1" sx={{ margin: 0 }}>
-        Original Reel Sequence Finder
-      </Typography>
       <Typography
         variant="body1"
         sx={{

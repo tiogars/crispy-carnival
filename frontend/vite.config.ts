@@ -11,18 +11,23 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://api:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/media': {
-        target: 'http://api:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://api:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },
+  },
+  optimizeDeps: {
+    // Don't hold HTTP responses while the dep crawler runs —
+    // avoids long first-request timeouts behind a reverse proxy.
+    holdUntilCrawlEnd: false,
   },
   test: {
     environment: 'jsdom',
