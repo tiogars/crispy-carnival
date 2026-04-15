@@ -2,11 +2,11 @@ name: crispy-carnival
 
 services:
   frontend:
-    image: ghcr.io/tiogars/crispy-carnival-frontend:latest
+    image: localhost:5000/crispy-carnival-frontend:latest
     restart: unless-stopped
 
   api:
-    image: ghcr.io/tiogars/crispy-carnival-api:latest
+    image: localhost:5000/crispy-carnival-api:latest
     environment:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: ghcr.io/tiogars/crispy-carnival-proxy:latest
+    image: localhost:5000/crispy-carnival-proxy:latest
     depends_on:
       - frontend
       - api

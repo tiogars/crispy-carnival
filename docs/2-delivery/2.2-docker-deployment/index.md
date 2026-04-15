@@ -1,6 +1,18 @@
 # 2.2 Docker Deployment
 
-This section describes the production-style local runtime using Docker Compose.
+This section describes the Docker Compose runtime variants.
+
+## Compose files
+
+- `docker-compose.yml`: runs prebuilt images from GitHub Container Registry.
+- `docker-compose-local.yml`: runs images from a local registry (`localhost:5000`).
+- `docker-compose-dev.yml`: runs hot-reload services against local source code.
+
+All files define the same stack name:
+
+```yaml
+name: crispy-carnival
+```
 
 ## Services
 
@@ -17,10 +29,10 @@ This section describes the production-style local runtime using Docker Compose.
     - `/media` -> `api:8000`
     - `/` -> `frontend:80`
 
-## Start the stack
+## Start the stack (GHCR images)
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml up -d
 ```
 
 App URL: `http://localhost:3000`
@@ -28,40 +40,45 @@ App URL: `http://localhost:3000`
 ## Stop the stack
 
 ```bash
-docker compose down
+docker compose -f docker-compose.yml down
 ```
 
-## Hot-reload development variant
+## Start the stack (local registry images)
 
-Use the `dev` profile from the main Compose file to avoid image rebuilds on
-source changes.
+```bash
+docker compose -f docker-compose-local.yml up -d
+```
+
+Use this mode after pushing local builds to your registry:
+
+- `localhost:5000/crispy-carnival-frontend:latest`
+- `localhost:5000/crispy-carnival-api:latest`
+- `localhost:5000/crispy-carnival-proxy:latest`
+
+## Hot-reload development stack
 
 ### Dev services
 
-- `frontend-dev`: Vite dev server with HMR.
-- `api-dev`: FastAPI with `uvicorn --reload`.
-- `proxy-dev`: nginx reverse-proxy exposing a single entrypoint.
+- `frontend`: Vite dev server with HMR.
+- `api`: FastAPI with `uvicorn --reload`.
+- `proxy`: nginx reverse-proxy exposing a single entrypoint.
 
 ### Start
 
 ```bash
-docker compose stop proxy frontend api
-docker compose up -d --build frontend-dev api-dev proxy-dev
+docker compose -f docker-compose-dev.yml up -d --build
 ```
-
-This sequence avoids a port conflict on `3000` by stopping the standard proxy
-before starting the dev proxy.
 
 ### Logs (optional)
 
 ```bash
-docker compose logs -f frontend-dev api-dev proxy-dev
+docker compose -f docker-compose-dev.yml logs -f frontend api proxy
 ```
 
 ### Stop
 
 ```bash
-docker compose down
+docker compose -f docker-compose-dev.yml down
 ```
 
 ### Runtime URLs
@@ -80,7 +97,7 @@ docker compose down
 MkDocs is isolated behind the `docs` profile:
 
 ```bash
-docker compose --profile docs up -d mkdocs
+docker compose -f docker-compose.yml --profile docs up -d mkdocs
 ```
 
 Docs URL: `http://localhost:8000`

@@ -60,13 +60,19 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Backend runs at `http://localhost:8000`.
 
-### Docker (recommended for production)
+### Docker (recommended for container runtime)
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 App available at `http://localhost:3000`.
+
+Compose variants:
+
+- `docker-compose.yml`: pull prebuilt images from GitHub Container Registry.
+- `docker-compose-local.yml`: run images published in a local registry.
+- `docker-compose-dev.yml`: hot-reload setup for local source development.
 
 ## Available scripts
 
