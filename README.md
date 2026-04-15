@@ -70,9 +70,9 @@ App available at `http://localhost:3000`.
 
 Compose variants:
 
-- `docker-compose.yml`: pull prebuilt images from GitHub Container Registry.
+- `docker-compose.yml`: run prebuilt images from GitHub Container Registry.
 - `docker-compose-local.yml`: run images published in a local registry.
-- `docker-compose-dev.yml`: hot-reload setup for local source development.
+- `docker-compose-dev.yml`: run hot-reload services for local source development.
 
 ## Available scripts
 
