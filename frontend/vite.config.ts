@@ -9,6 +9,20 @@ export default defineConfig({
     strictPort: true,
     // Allow reverse-proxy host headers in Docker dev mode.
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://api:8000',
+        changeOrigin: true,
+      },
+      '/media': {
+        target: 'http://api:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://api:8000',
+        changeOrigin: true,
+      },
+    },
   },
   test: {
     environment: 'jsdom',
