@@ -1,20 +1,26 @@
-name: crispy-carnival
+name: crispy-carnival-local
 
 services:
   frontend:
-    image: ghcr.io/tiogars/crispy-carnival-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
 
   api:
-    image: ghcr.io/tiogars/crispy-carnival-api:latest
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     environment:
       FILM_LIBRARY_ROOT: /data/films
     volumes:
+      - ./server/app:/app/app
       - ./server/data/films:/data/films
     restart: unless-stopped
 
   proxy:
-    image: ghcr.io/tiogars/crispy-carnival-proxy:latest
+    image: localhost:5000/crispy-carnival-proxy:latest
     depends_on:
       - frontend
       - api
