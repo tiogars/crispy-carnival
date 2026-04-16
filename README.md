@@ -91,11 +91,11 @@ Compose variants:
 
 | Technology | Version | Purpose |
 | ---------- | ------- | ------- |
-| Vite | 6 | Frontend build tool and dev server |
-| React | 18 | UI component library |
-| TypeScript | 5 | Static type checking |
+| Vite | 8 | Frontend build tool and dev server |
+| React | 19 | UI component library |
+| TypeScript | 6 | Static type checking |
 | Remotion + `@remotion/player` | 4 | Frame-sequence playback |
-| MUI (Material UI) | 7 | UI component library |
+| MUI (Material UI) | 9 | UI component library |
 | react-hook-form | 7 | Form state management |
 | FastAPI | latest | Backend REST API |
 | Uvicorn | latest | ASGI server |

@@ -2,10 +2,10 @@
 
 ## Frontend
 
-- Vite 6
-- React 18
-- TypeScript 5
-- Remotion + @remotion/player for sequence preview
+- Vite 8
+- React 19
+- TypeScript 6
+- Remotion + `@remotion/player` for sequence preview
 
 ## Backend
 
