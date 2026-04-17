@@ -1,4 +1,4 @@
-import { Chip, Grid, Stack, Typography } from '@mui/material';
+import { Box, Chip, Grid, Stack, Typography } from '@mui/material';
 
 import { KpiCard } from '../../components/KpiCard';
 import { RepositoryTemplateCard } from '../../components/RepositoryTemplateCard';
@@ -44,7 +44,7 @@ export function DashboardPage({
       </Grid>
 
       {tags.length > 0 ? (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           {tags.map((tag) => {
             const isActive = selectedTagIds.includes(tag.id);
             return (
@@ -61,7 +61,7 @@ export function DashboardPage({
           {selectedTagIds.length > 0 ? (
             <Chip label="Clear filter" size="small" variant="outlined" onClick={onClearTagFilter} />
           ) : null}
-        </Stack>
+        </Box>
       ) : null}
 
       {templates.length === 0 ? (

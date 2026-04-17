@@ -4,6 +4,9 @@
 
 - Film selector
 - Reel selector
+- Witness video selector
+- Extraction parameter form
+- Extraction job status feedback
 - Loading and error states
 - Remotion composition and player integration
 
@@ -12,10 +15,14 @@
 - Film listing endpoint
 - Reel listing endpoint
 - Frame listing endpoint
+- Witness video listing endpoint
+- Sequence extraction command endpoint
+- Sequence extraction job status endpoint
+- FFmpeg invocation and output persistence
 - Static media mount
 
 ## Documentation
 
 - Specification update
 - Delivery plan update
-- User manual update
+- User manual update after feature delivery

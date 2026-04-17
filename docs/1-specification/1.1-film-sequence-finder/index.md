@@ -14,5 +14,6 @@ This section defines the complete scope of the Film Sequence Finder product.
 
 ## Summary
 
-The application retrieves original reel image sequences for a selected film and
-renders those frames in a Remotion-based viewer.
+The application retrieves original reel image sequences for a selected film,
+can derive new reel candidates from a selected witness video, and renders those
+frames in a Remotion-based viewer.

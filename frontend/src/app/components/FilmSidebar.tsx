@@ -1,4 +1,4 @@
-import { Box, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Typography } from '@mui/material';
+import { Box, Button, FormControl, InputLabel, MenuItem, Paper, Select, Typography } from '@mui/material';
 
 import type { Film, Reel } from '../App.types';
 
@@ -41,7 +41,15 @@ export const FilmSidebar = ({
         gap: 0.75,
       }}
     >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={0.75} flexWrap="wrap">
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 0.75,
+          flexWrap: 'wrap',
+        }}
+      >
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           <Button variant="contained" onClick={onAddFilm} disabled={isLoading} style={{ pointerEvents: 'auto' }}>
             Add film
@@ -56,7 +64,7 @@ export const FilmSidebar = ({
             Upload witness video
           </Button>
         </Box>
-      </Stack>
+      </Box>
       <FormControl fullWidth>
         <InputLabel id="film-select-label">Film</InputLabel>
         <Select

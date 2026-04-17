@@ -12,6 +12,11 @@ import {
   NewFilmFormValues,
   Reel,
   ReelFramesResponse,
+  SequenceExtractionAcceptedResponse,
+  SequenceExtractionFormValues,
+  SequenceExtractionJobsHistoryResponse,
+  SequenceExtractionJobStatusResponse,
+  SequenceExtractionRequest,
   UploadWitnessVideoResponse,
   WitnessVideosResponse,
 } from './App.types';
@@ -21,6 +26,7 @@ import { FilmSidebar } from './components/FilmSidebar';
 import { HeroSection } from './components/HeroSection';
 import { CreateFilmDialog } from './components/dialogs/CreateFilmDialog';
 import { DeleteWitnessDialog } from './components/dialogs/DeleteWitnessDialog';
+import { SequenceExtractionDialog } from './components/dialogs/SequenceExtractionDialog';
 import { UploadWitnessDialog } from './components/dialogs/UploadWitnessDialog';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -110,6 +116,14 @@ const deleteRequest = async (path: string): Promise<void> => {
   }
 };
 
+const defaultSequenceExtractionValues: SequenceExtractionFormValues = {
+  targetFps: '2',
+  sceneThreshold: '0.30',
+  minSpacingSeconds: '1.0',
+  outputReelName: '',
+  overwriteExisting: false,
+};
+
 export const App = () => {
   const [films, setFilms] = useState<Film[]>([]);
   const [selectedFilmId, setSelectedFilmId] = useState<string>('');
@@ -128,6 +142,14 @@ export const App = () => {
   const [selectedWitnessVideoUrl, setSelectedWitnessVideoUrl] = useState<string>('');
   const [isDeleteWitnessDialogOpen, setDeleteWitnessDialogOpen] = useState<boolean>(false);
   const [isDeletingWitnessVideo, setDeletingWitnessVideo] = useState<boolean>(false);
+  const [isSequenceExtractionDialogOpen, setSequenceExtractionDialogOpen] = useState<boolean>(false);
+  const [isStartingSequenceExtraction, setStartingSequenceExtraction] = useState<boolean>(false);
+  const [sequenceExtractionValues, setSequenceExtractionValues] = useState<SequenceExtractionFormValues>(
+    defaultSequenceExtractionValues,
+  );
+  const [sequenceExtractionErrorMessage, setSequenceExtractionErrorMessage] = useState<string>('');
+  const [sequenceExtractionJob, setSequenceExtractionJob] = useState<SequenceExtractionJobStatusResponse | null>(null);
+  const [sequenceExtractionHistory, setSequenceExtractionHistory] = useState<SequenceExtractionJobStatusResponse[]>([]);
   const {
     register,
     handleSubmit,
@@ -171,6 +193,41 @@ export const App = () => {
     }
   }, []);
 
+  const loadReels = useCallback(
+    async (filmId: string, preferredReelId?: string) => {
+      setIsLoading(true);
+      setErrorMessage('');
+
+      try {
+        const payload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${filmId}/reels`);
+        setReels(payload.reels);
+
+        if (payload.reels.length === 0) {
+          setSelectedReelId('');
+          setFrameUrls([]);
+          return;
+        }
+
+        setSelectedReelId((currentReelId) => {
+          if (preferredReelId && payload.reels.some((reel) => reel.id === preferredReelId)) {
+            return preferredReelId;
+          }
+
+          if (currentReelId && payload.reels.some((reel) => reel.id === currentReelId)) {
+            return currentReelId;
+          }
+
+          return payload.reels[0].id;
+        });
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to load reels.');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     void loadFilms();
   }, [loadFilms]);
@@ -203,6 +260,20 @@ export const App = () => {
     setOverwriteWitnessVideo(false);
   };
 
+  const closeSequenceExtractionDialog = () => {
+    if (sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running' || isStartingSequenceExtraction) {
+      return;
+    }
+
+    setSequenceExtractionDialogOpen(false);
+    setSequenceExtractionErrorMessage('');
+  };
+
+  const resetSequenceExtractionDefaults = () => {
+    setSequenceExtractionValues(defaultSequenceExtractionValues);
+    setSequenceExtractionErrorMessage('');
+  };
+
   const loadWitnessVideos = useCallback(async (preferredMediaUrl?: string) => {
     if (!selectedFilmId) {
       setWitnessVideos([]);
@@ -233,6 +304,22 @@ export const App = () => {
     } catch {
       setWitnessVideos([]);
       setSelectedWitnessVideoUrl('');
+    }
+  }, [selectedFilmId]);
+
+  const loadSequenceExtractionHistory = useCallback(async () => {
+    if (!selectedFilmId) {
+      setSequenceExtractionHistory([]);
+      return;
+    }
+
+    try {
+      const payload = await fetchJson<SequenceExtractionJobsHistoryResponse>(
+        `/api/filesystem/films/${selectedFilmId}/sequence-extraction-jobs`,
+      );
+      setSequenceExtractionHistory(payload.jobs);
+    } catch {
+      setSequenceExtractionHistory([]);
     }
   }, [selectedFilmId]);
 
@@ -300,6 +387,92 @@ export const App = () => {
     }
   };
 
+  const submitSequenceExtraction = async () => {
+    if (!selectedFilmId || !selectedWitnessVideoEntry) {
+      setSequenceExtractionErrorMessage('Select a film and a witness video before starting extraction.');
+      return;
+    }
+
+    const targetFps = Number(sequenceExtractionValues.targetFps);
+    const sceneThreshold = Number(sequenceExtractionValues.sceneThreshold);
+    const minSpacingSeconds = Number(sequenceExtractionValues.minSpacingSeconds);
+
+    if (!Number.isFinite(targetFps) || targetFps <= 0) {
+      setSequenceExtractionErrorMessage('Target FPS must be greater than 0.');
+      return;
+    }
+
+    if (!Number.isFinite(sceneThreshold) || sceneThreshold <= 0 || sceneThreshold >= 1) {
+      setSequenceExtractionErrorMessage('Scene threshold must be greater than 0 and less than 1.');
+      return;
+    }
+
+    if (!Number.isFinite(minSpacingSeconds) || minSpacingSeconds < 0) {
+      setSequenceExtractionErrorMessage('Minimum spacing must be greater than or equal to 0.');
+      return;
+    }
+
+    setStartingSequenceExtraction(true);
+    setSequenceExtractionErrorMessage('');
+
+    try {
+      const payload = await postJson<SequenceExtractionAcceptedResponse>(
+        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(selectedWitnessVideoEntry.fileName)}/sequence-extraction`,
+        {
+          targetFps,
+          sceneThreshold,
+          minSpacingSeconds,
+          outputReelName: sequenceExtractionValues.outputReelName.trim() || undefined,
+          overwriteExisting: sequenceExtractionValues.overwriteExisting,
+        } satisfies SequenceExtractionRequest,
+      );
+
+      setSequenceExtractionJob({
+        jobId: payload.jobId,
+        status: payload.status,
+        filmId: payload.filmId,
+        witnessVideoName: payload.witnessVideoName,
+        outputReelId: null,
+        progressPercent: 0,
+        progressRatePercentPerSecond: null,
+        progressLabel: 'Queued',
+        currentStep: 0,
+        totalSteps: 4,
+        elapsedSeconds: 0,
+        estimatedRemainingSeconds: null,
+        startedAt: null,
+        finishedAt: null,
+        message: 'Sequence extraction job accepted.',
+      });
+    } catch (error) {
+      setSequenceExtractionErrorMessage(error instanceof Error ? error.message : 'Unable to start sequence extraction.');
+    } finally {
+      setStartingSequenceExtraction(false);
+    }
+  };
+
+  const refreshSequenceExtractionJob = useCallback(async (jobId: string) => {
+    try {
+      const payload = await fetchJson<SequenceExtractionJobStatusResponse>(`/api/sequence-extraction/jobs/${jobId}`);
+      setSequenceExtractionJob(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to refresh extraction status.';
+
+      setSequenceExtractionErrorMessage(message);
+      setSequenceExtractionJob((currentJob) => {
+        if (!currentJob) {
+          return currentJob;
+        }
+
+        return {
+          ...currentJob,
+          status: 'failed',
+          message,
+        };
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedFilmId) {
       setReels([]);
@@ -307,29 +480,8 @@ export const App = () => {
       return;
     }
 
-    const loadReels = async () => {
-      setIsLoading(true);
-      setErrorMessage('');
-
-      try {
-        const payload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${selectedFilmId}/reels`);
-        setReels(payload.reels);
-
-        if (payload.reels.length > 0) {
-          setSelectedReelId(payload.reels[0].id);
-        } else {
-          setSelectedReelId('');
-          setFrameUrls([]);
-        }
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to load reels.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void loadReels();
-  }, [selectedFilmId]);
+    void loadReels(selectedFilmId);
+  }, [loadReels, selectedFilmId]);
 
   useEffect(() => {
     if (!selectedFilmId || !selectedReelId) {
@@ -361,6 +513,48 @@ export const App = () => {
   useEffect(() => {
     void loadWitnessVideos();
   }, [loadWitnessVideos]);
+
+  useEffect(() => {
+    void loadSequenceExtractionHistory();
+  }, [loadSequenceExtractionHistory]);
+
+  useEffect(() => {
+    if (!sequenceExtractionJob) {
+      return;
+    }
+
+    if (sequenceExtractionJob.status === 'succeeded') {
+      void loadReels(selectedFilmId, sequenceExtractionJob.outputReelId ?? undefined);
+      void loadSequenceExtractionHistory();
+      setSuccessMessage(`Sequence extraction "${sequenceExtractionJob.outputReelId ?? sequenceExtractionJob.jobId}" completed successfully.`);
+      setSequenceExtractionDialogOpen(false);
+      setSequenceExtractionErrorMessage('');
+      setSequenceExtractionJob(null);
+      resetSequenceExtractionDefaults();
+      return;
+    }
+
+    if (sequenceExtractionJob.status === 'failed') {
+      void loadSequenceExtractionHistory();
+      setSequenceExtractionErrorMessage(sequenceExtractionJob.message ?? 'Sequence extraction failed.');
+      return;
+    }
+
+    const timeoutId = globalThis.setTimeout(() => {
+      void refreshSequenceExtractionJob(sequenceExtractionJob.jobId);
+    }, 1000);
+
+    return () => {
+      globalThis.clearTimeout(timeoutId);
+    };
+  }, [loadReels, loadSequenceExtractionHistory, refreshSequenceExtractionJob, selectedFilmId, sequenceExtractionJob]);
+
+  useEffect(() => {
+    setSequenceExtractionDialogOpen(false);
+    setSequenceExtractionErrorMessage('');
+    setSequenceExtractionJob(null);
+    resetSequenceExtractionDefaults();
+  }, [selectedFilmId]);
 
   const durationInFrames = useMemo<number>(() => {
     return frameUrls.length > 0 ? frameUrls.length : 1;
@@ -409,8 +603,14 @@ export const App = () => {
           selectedWitnessVideoUrl={selectedWitnessVideoUrl}
           witnessVideos={witnessVideos}
           selectedWitnessVideoEntry={selectedWitnessVideoEntry}
+          extractionHistory={sequenceExtractionHistory}
           isDeletingWitnessVideo={isDeletingWitnessVideo}
+          isExtractingSequence={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
           onDeleteSelectedWitnessVideo={() => setDeleteWitnessDialogOpen(true)}
+          onOpenSequenceExtraction={() => {
+            setSequenceExtractionDialogOpen(true);
+            setSequenceExtractionErrorMessage('');
+          }}
           onWitnessVideoChange={setSelectedWitnessVideoUrl}
         />
       </Box>
@@ -449,6 +649,27 @@ export const App = () => {
         onUpload={() => {
           void submitWitnessVideoUpload();
         }}
+      />
+
+      <SequenceExtractionDialog
+        open={isSequenceExtractionDialogOpen}
+        selectedFilmId={selectedFilmId}
+        selectedWitnessVideoName={selectedWitnessVideoEntry?.fileName ?? ''}
+        isSubmitting={isStartingSequenceExtraction}
+        values={sequenceExtractionValues}
+        jobStatus={sequenceExtractionJob}
+        errorMessage={sequenceExtractionErrorMessage}
+        onClose={closeSequenceExtractionDialog}
+        onFieldChange={(field, value) => {
+          setSequenceExtractionValues((currentValues) => ({
+            ...currentValues,
+            [field]: value,
+          }));
+        }}
+        onSubmit={() => {
+          void submitSequenceExtraction();
+        }}
+        onResetDefaults={resetSequenceExtractionDefaults}
       />
 
       <Snackbar

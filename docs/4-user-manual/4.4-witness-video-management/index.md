@@ -31,6 +31,13 @@ The file is stored at:
 FILM_LIBRARY_ROOT/<film_id>/_witness_videos/<filename>
 ```
 
+## Sequence extraction settings
+
+Once a witness video is selected, the application can expose an
+**Extract sequence** action that opens the sequence extraction settings screen.
+
+See [4.4.1 Sequence Extraction Settings](4.4.1-sequence-extraction-settings/index.md).
+
 ## Playing a witness video
 
 Once a witness video is uploaded and selected, it appears in the

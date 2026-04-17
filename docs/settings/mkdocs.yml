@@ -19,8 +19,10 @@ nav:
       - Film Sequence Finder:
           - Overview: 1-specification/1.1-film-sequence-finder/index.md
           - Functional Specification: 1-specification/1.1-film-sequence-finder/1.1.1-functional-specification/index.md
+          - Video Sequence Segmentation: 1-specification/1.1-film-sequence-finder/1.1.1-functional-specification/1.1.1.1-video-sequence-segmentation/index.md
           - Data and Persistence: 1-specification/1.1-film-sequence-finder/1.1.2-data-and-persistence/index.md
           - User Experience: 1-specification/1.1-film-sequence-finder/1.1.3-user-experience/index.md
+          - Sequence Extraction Settings Page: 1-specification/1.1-film-sequence-finder/1.1.3-user-experience/1.1.3.1-sequence-extraction-settings-page/index.md
           - Technical Stack: 1-specification/1.1-film-sequence-finder/1.1.4-technical-stack/index.md
           - Technical Methodology: 1-specification/1.1-film-sequence-finder/1.1.5-technical-methodology/index.md
           - Coding Conventions: 1-specification/1.1-film-sequence-finder/1.1.6-coding-conventions/index.md
@@ -45,6 +47,7 @@ nav:
       - API Operations: 4-user-manual/4.2-api-operations/index.md
       - Film Management: 4-user-manual/4.3-film-management/index.md
       - Witness Video Management: 4-user-manual/4.4-witness-video-management/index.md
+      - Sequence Extraction Settings: 4-user-manual/4.4-witness-video-management/4.4.1-sequence-extraction-settings/index.md
 
 theme:
   custom_dir: docs/settings/overrides

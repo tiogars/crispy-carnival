@@ -59,6 +59,8 @@ services:
 
   mkdocs:
     image: ghcr.io/tiogars/mkdocs-docker-image:latest
+    ports:
+      - "9000:8000"
     volumes:
       - ./docs:/server/docs
       - ./docs/settings/mkdocs.yml:/server/mkdocs.yml

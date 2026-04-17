@@ -1,7 +1,10 @@
 # 4.2 API Operations
 
 The FastAPI server exposes a REST API over HTTP.
-All endpoints are prefixed with `/api/filesystem/` and return JSON.
+Filesystem endpoints are prefixed with `/api/filesystem/` and asynchronous
+extraction job endpoints are prefixed with `/api/sequence-extraction/`.
+All API endpoints return JSON except file upload requests and `204` delete
+responses.
 Static media files (frame images and witness videos) are served under `/media`.
 
 ## Starting the server
@@ -229,6 +232,99 @@ Permanently removes a witness video file.
 
 ---
 
+### Start sequence extraction
+
+```text
+POST /api/filesystem/films/{film_id}/witness-videos/{file_name}/sequence-extraction
+Content-Type: application/json
+```
+
+Starts an asynchronous FFmpeg-based extraction job for the selected witness
+video.
+
+#### Request body
+
+```json
+{
+  "targetFps": 2,
+  "sceneThreshold": 0.3,
+  "minSpacingSeconds": 1.0,
+  "outputReelName": "witness_20240312_auto",
+  "overwriteExisting": false
+}
+```
+
+| Field | Required | Description |
+| ----- | -------- | ----------- |
+| `targetFps` | Yes | Number of frames per second evaluated before scene selection. Must be greater than `0`. |
+| `sceneThreshold` | Yes | FFmpeg scene sensitivity threshold. Must be greater than `0` and less than `1`. |
+| `minSpacingSeconds` | Yes | Minimum delay between accepted frames. Must be `0` or greater. |
+| `outputReelName` | No | Optional target reel name. If omitted, the backend generates one. |
+| `overwriteExisting` | No | When `true`, replaces an existing generated reel with the same target name. |
+
+#### Response — `202 Accepted`
+
+```json
+{
+  "jobId": "seqext_20260416_001",
+  "status": "queued",
+  "filmId": "the_third_man",
+  "witnessVideoName": "witness_20240312.mp4",
+  "statusUrl": "/api/sequence-extraction/jobs/seqext_20260416_001"
+}
+```
+
+#### Error responses
+
+| Status | Condition |
+| ------ | --------- |
+| `400` | Invalid parameter values or invalid reel name. |
+| `404` | Film or witness video not found. |
+| `409` | Output reel already exists and `overwriteExisting` is `false`. |
+| `503` | FFmpeg is not available in the server runtime environment. |
+
+---
+
+### Get sequence extraction job status
+
+```text
+GET /api/sequence-extraction/jobs/{job_id}
+```
+
+Returns the current state of an asynchronous sequence extraction job.
+
+#### Response
+
+```json
+{
+  "jobId": "seqext_20260416_001",
+  "status": "succeeded",
+  "filmId": "the_third_man",
+  "witnessVideoName": "witness_20240312.mp4",
+  "outputReelId": "witness_20240312_auto",
+  "startedAt": "2026-04-16T18:42:10Z",
+  "finishedAt": "2026-04-16T18:42:18Z",
+  "message": "Sequence extraction completed successfully."
+}
+```
+
+#### Status values
+
+| Status | Meaning |
+| ------ | ------- |
+| `queued` | The request was accepted and is waiting to start. |
+| `running` | FFmpeg extraction is in progress. |
+| `succeeded` | Extraction completed and the generated reel is available. |
+| `failed` | Extraction stopped with an error that can be shown to the user. |
+
+#### Error responses
+
+| Status | Condition |
+| ------ | --------- |
+| `404` | Job ID not found or expired. |
+
+---
+
 ## Static media
 
 Frame images and witness videos are served as static files under the `/media`
@@ -238,3 +334,6 @@ prefix, mapped directly to `FILM_LIBRARY_ROOT`:
 /media/<film_id>/<reel_id>/<frame_filename>
 /media/<film_id>/_witness_videos/<video_filename>
 ```
+
+Generated reels created by sequence extraction are exposed through the same reel
+media path pattern as imported reels.

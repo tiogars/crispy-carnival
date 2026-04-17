@@ -12,6 +12,7 @@
 - Python 3.11+
 - FastAPI
 - Uvicorn
+- FFmpeg available on the server runtime path
 
 ## Documentation
 

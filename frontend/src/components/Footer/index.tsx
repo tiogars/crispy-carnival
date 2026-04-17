@@ -1,14 +1,17 @@
-import { Box, Container, Link, Stack, Typography } from '@mui/material';
+import { Box, Container, Typography } from '@mui/material';
 
-export function Footer() {
+export const Footer = () => {
   return (
     <Box component="footer" sx={{ borderTop: 1, borderColor: 'divider', py: 3 }}>
       <Container>
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={2}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', md: 'center' }}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: 2,
+            justifyContent: 'space-between',
+            alignItems: { xs: 'flex-start', md: 'center' },
+          }}
         >
           <Typography variant="body2" color="text.secondary">
             Copyright Tiogars 2026
@@ -16,8 +19,8 @@ export function Footer() {
           <Typography variant="body2" color="text.secondary">
             Powered by React, Vite, TypeScript, and Material UI
           </Typography>
-        </Stack>
+        </Box>
       </Container>
     </Box>
   );
-}
+};

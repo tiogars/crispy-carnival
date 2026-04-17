@@ -1,8 +1,46 @@
-import { Box, Button, FormControl, InputLabel, Link, MenuItem, Paper, Select, Stack, Typography } from '@mui/material';
+import { Box, Button, FormControl, InputLabel, Link, MenuItem, Paper, Select, Typography } from '@mui/material';
 import { Player } from '@remotion/player';
 
 import { FilmSequenceComposition } from '../../features/film-viewer/FilmSequenceComposition';
-import type { UploadWitnessVideoResponse } from '../App.types';
+import type { SequenceExtractionJobStatusResponse, UploadWitnessVideoResponse } from '../App.types';
+
+const formatDuration = (seconds: number | null) => {
+  if (seconds === null) {
+    return '--';
+  }
+
+  const roundedSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(roundedSeconds / 60);
+  const remainingSeconds = roundedSeconds % 60;
+
+  if (minutes > 0) {
+    return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`;
+  }
+
+  return `${remainingSeconds}s`;
+};
+
+const formatProgressRate = (ratePercentPerSecond: number | null) => {
+  if (ratePercentPerSecond === null) {
+    return '--';
+  }
+
+  return `${ratePercentPerSecond.toFixed(ratePercentPerSecond >= 10 ? 1 : 2)}%/s`;
+};
+
+const formatHistoryTimestamp = (value: string | null) => {
+  if (!value) {
+    return 'Pending';
+  }
+
+  const timestamp = Date.parse(value);
+
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  return new Date(timestamp).toLocaleString();
+};
 
 type FilmPreviewSectionProps = {
   frameUrls: string[];
@@ -10,8 +48,11 @@ type FilmPreviewSectionProps = {
   selectedWitnessVideoUrl: string;
   witnessVideos: UploadWitnessVideoResponse[];
   selectedWitnessVideoEntry: UploadWitnessVideoResponse | null;
+  extractionHistory: SequenceExtractionJobStatusResponse[];
   isDeletingWitnessVideo: boolean;
+  isExtractingSequence: boolean;
   onDeleteSelectedWitnessVideo: () => void;
+  onOpenSequenceExtraction: () => void;
   onWitnessVideoChange: (videoUrl: string) => void;
 };
 
@@ -21,8 +62,11 @@ export const FilmPreviewSection = ({
   selectedWitnessVideoUrl,
   witnessVideos,
   selectedWitnessVideoEntry,
+  extractionHistory,
   isDeletingWitnessVideo,
+  isExtractingSequence,
   onDeleteSelectedWitnessVideo,
+  onOpenSequenceExtraction,
   onWitnessVideoChange,
 }: Readonly<FilmPreviewSectionProps>) => {
   return (
@@ -55,7 +99,15 @@ export const FilmPreviewSection = ({
           background: 'rgba(255, 255, 255, 0.06)',
         }}
       >
-        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={0.75} flexWrap="wrap">
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 0.75,
+            flexWrap: 'wrap',
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
             {selectedWitnessVideoUrl ? (
               <Link
@@ -78,6 +130,14 @@ export const FilmPreviewSection = ({
             )}
             <Button
               variant="contained"
+              color="secondary"
+              onClick={onOpenSequenceExtraction}
+              disabled={isExtractingSequence || !selectedWitnessVideoEntry}
+            >
+              Extract sequence
+            </Button>
+            <Button
+              variant="contained"
               color="error"
               onClick={onDeleteSelectedWitnessVideo}
               disabled={isDeletingWitnessVideo || !selectedWitnessVideoEntry}
@@ -85,7 +145,7 @@ export const FilmPreviewSection = ({
               Delete selected witness video
             </Button>
           </Box>
-        </Stack>
+        </Box>
         <FormControl fullWidth sx={{ marginTop: 1 }}>
           <InputLabel id="witness-video-select-label">Witness video</InputLabel>
           <Select
@@ -124,6 +184,49 @@ export const FilmPreviewSection = ({
             No witness video available for this film.
           </Typography>
         )}
+
+        <Box
+          sx={{
+            marginTop: 1,
+            paddingTop: 1,
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'grid',
+            gap: 0.75,
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ color: '#e3f2fd', fontWeight: 700 }}>
+            Recent extraction history
+          </Typography>
+          {extractionHistory.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No extraction job recorded for this film yet.
+            </Typography>
+          ) : (
+            extractionHistory.slice(0, 5).map((job) => (
+              <Box
+                key={job.jobId}
+                sx={{
+                  padding: 1,
+                  borderRadius: 1,
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  display: 'grid',
+                  gap: 0.3,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: '#ffffff', fontWeight: 600 }}>
+                  {job.outputReelId ?? job.jobId} · {job.status}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Video: {job.witnessVideoName} · Updated: {formatHistoryTimestamp(job.finishedAt ?? job.startedAt)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Elapsed: {formatDuration(job.elapsedSeconds)} | Remaining: {formatDuration(job.estimatedRemainingSeconds)} | Speed:{' '}
+                  {formatProgressRate(job.progressRatePercentPerSecond)}
+                </Typography>
+              </Box>
+            ))
+          )}
+        </Box>
       </Box>
     </Paper>
   );

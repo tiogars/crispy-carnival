@@ -113,3 +113,244 @@ def test_delete_witness_video_returns_404_when_missing(monkeypatch, tmp_path: Pa
 
     assert response.status_code == 404
     assert response.json() == {'detail': 'Witness video not found.'}
+
+
+def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    film_path = tmp_path / 'test_film'
+    (film_path / '_witness_videos').mkdir(parents=True, exist_ok=True)
+    (film_path / 'reel_001').mkdir(parents=True, exist_ok=True)
+    (film_path / 'reel_001' / 'frame0001.jpg').write_bytes(b'x')
+
+    response = client.get('/api/filesystem/films/test_film/reels')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'reels': [
+            {
+                'id': 'reel_001',
+                'frameCount': 1,
+            }
+        ]
+    }
+
+
+def test_start_sequence_extraction_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b'video-bytes')
+
+    response = client.post(
+        '/api/filesystem/films/test_film/witness-videos/witness.mp4/sequence-extraction',
+        json={
+            'targetFps': 2,
+            'sceneThreshold': 0.3,
+            'minSpacingSeconds': 1.0,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'FFmpeg is not available in the server runtime environment.'}
+
+
+def test_start_sequence_extraction_returns_409_when_output_reel_exists(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b'video-bytes')
+    existing_reel_path = tmp_path / 'test_film' / 'custom_reel'
+    existing_reel_path.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/witness-videos/witness.mp4/sequence-extraction',
+        json={
+            'targetFps': 2,
+            'sceneThreshold': 0.3,
+            'minSpacingSeconds': 1.0,
+            'outputReelName': 'Custom Reel',
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'A reel with this name already exists.'}
+
+
+def test_start_sequence_extraction_creates_reel_and_job_status(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    main.SEQUENCE_EXTRACTION_JOBS.clear()
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
+    monkeypatch.setattr(main, '_get_media_duration_seconds', lambda _video_path: 12.0)
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b'video-bytes')
+
+    def fake_execute_sequence_extraction_command(job_id: str, command: list[str], duration_seconds: float | None):
+        output_pattern = Path(command[-1])
+        output_pattern.parent.mkdir(parents=True, exist_ok=True)
+        (output_pattern.parent / 'frame00001.jpg').write_bytes(b'frame-1')
+        (output_pattern.parent / 'frame00002.jpg').write_bytes(b'frame-2')
+        assert duration_seconds is not None
+        assert abs(duration_seconds - 12.0) < 0.0001
+        main._update_sequence_extraction_job(
+            job_id,
+            progressPercent=76,
+            progressRatePercentPerSecond=8.1,
+            progressLabel='Extracting frames',
+            currentStep=2,
+            totalSteps=4,
+            elapsedSeconds=9.4,
+            estimatedRemainingSeconds=2.1,
+            message='FFmpeg processed 9.4s of 12.0s.',
+        )
+
+    monkeypatch.setattr(main, '_execute_sequence_extraction_command', fake_execute_sequence_extraction_command)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/witness-videos/witness.mp4/sequence-extraction',
+        json={
+            'targetFps': 2,
+            'sceneThreshold': 0.3,
+            'minSpacingSeconds': 1.0,
+            'outputReelName': 'Witness Auto',
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body['status'] == 'queued'
+    assert body['filmId'] == 'test_film'
+    assert body['witnessVideoName'] == 'witness.mp4'
+    assert body['statusUrl'] == f"/api/sequence-extraction/jobs/{body['jobId']}"
+
+    status_response = client.get(body['statusUrl'])
+
+    assert status_response.status_code == 200
+    payload = status_response.json()
+
+    assert payload == {
+        'jobId': body['jobId'],
+        'status': 'succeeded',
+        'filmId': 'test_film',
+        'witnessVideoName': 'witness.mp4',
+        'outputReelId': 'witness_auto',
+        'progressPercent': 100,
+        'progressRatePercentPerSecond': payload['progressRatePercentPerSecond'],
+        'progressLabel': 'Completed',
+        'currentStep': 4,
+        'totalSteps': 4,
+        'elapsedSeconds': payload['elapsedSeconds'],
+        'estimatedRemainingSeconds': 0.0,
+        'startedAt': payload['startedAt'],
+        'finishedAt': payload['finishedAt'],
+        'message': 'Sequence extraction completed successfully.',
+    }
+    assert payload['elapsedSeconds'] is not None
+    assert payload['elapsedSeconds'] >= 0
+    assert payload['progressRatePercentPerSecond'] is not None
+    assert payload['progressRatePercentPerSecond'] > 0
+
+    output_dir = tmp_path / 'test_film' / 'witness_auto'
+    assert (output_dir / 'frame00001.jpg').read_bytes() == b'frame-1'
+    assert (output_dir / 'frame00002.jpg').read_bytes() == b'frame-2'
+    metadata = (output_dir / main.EXTRACTION_METADATA_FILENAME).read_text(encoding='utf-8')
+    assert '"witnessVideoName": "witness.mp4"' in metadata
+    assert '"outputReelId": "witness_auto"' in metadata
+
+
+def test_get_sequence_extraction_job_status_returns_404_when_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    main.SEQUENCE_EXTRACTION_JOBS.clear()
+
+    response = client.get('/api/sequence-extraction/jobs/missing-job')
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Job not found.'}
+
+
+def test_get_sequence_extraction_jobs_history_returns_latest_jobs_first(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    (tmp_path / 'test_film').mkdir(parents=True, exist_ok=True)
+    main.SEQUENCE_EXTRACTION_JOBS.clear()
+    main.SEQUENCE_EXTRACTION_JOBS.update(
+        {
+            'seqext_old': main.SequenceExtractionJobStatusResponse(
+                jobId='seqext_old',
+                status='succeeded',
+                filmId='test_film',
+                witnessVideoName='witness-old.mp4',
+                outputReelId='old_reel',
+                progressPercent=100,
+                progressRatePercentPerSecond=7.5,
+                progressLabel='Completed',
+                currentStep=4,
+                totalSteps=4,
+                elapsedSeconds=12.0,
+                estimatedRemainingSeconds=0.0,
+                startedAt='2026-04-16T18:40:00Z',
+                finishedAt='2026-04-16T18:40:12Z',
+                message='Sequence extraction completed successfully.',
+            ),
+            'seqext_new': main.SequenceExtractionJobStatusResponse(
+                jobId='seqext_new',
+                status='failed',
+                filmId='test_film',
+                witnessVideoName='witness-new.mp4',
+                outputReelId='new_reel',
+                progressPercent=73,
+                progressRatePercentPerSecond=8.4,
+                progressLabel='Failed',
+                currentStep=2,
+                totalSteps=4,
+                elapsedSeconds=8.7,
+                estimatedRemainingSeconds=None,
+                startedAt='2026-04-16T18:45:00Z',
+                finishedAt='2026-04-16T18:45:09Z',
+                message='Sequence extraction failed.',
+            ),
+        }
+    )
+
+    response = client.get('/api/filesystem/films/test_film/sequence-extraction-jobs')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'jobs': [
+            {
+                'jobId': 'seqext_new',
+                'status': 'failed',
+                'filmId': 'test_film',
+                'witnessVideoName': 'witness-new.mp4',
+                'outputReelId': 'new_reel',
+                'progressPercent': 73,
+                'progressRatePercentPerSecond': 8.4,
+                'progressLabel': 'Failed',
+                'currentStep': 2,
+                'totalSteps': 4,
+                'elapsedSeconds': 8.7,
+                'estimatedRemainingSeconds': None,
+                'startedAt': '2026-04-16T18:45:00Z',
+                'finishedAt': '2026-04-16T18:45:09Z',
+                'message': 'Sequence extraction failed.',
+            },
+            {
+                'jobId': 'seqext_old',
+                'status': 'succeeded',
+                'filmId': 'test_film',
+                'witnessVideoName': 'witness-old.mp4',
+                'outputReelId': 'old_reel',
+                'progressPercent': 100,
+                'progressRatePercentPerSecond': 7.5,
+                'progressLabel': 'Completed',
+                'currentStep': 4,
+                'totalSteps': 4,
+                'elapsedSeconds': 12.0,
+                'estimatedRemainingSeconds': 0.0,
+                'startedAt': '2026-04-16T18:40:00Z',
+                'finishedAt': '2026-04-16T18:40:12Z',
+                'message': 'Sequence extraction completed successfully.',
+            },
+        ]
+    }
