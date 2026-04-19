@@ -1,4 +1,5 @@
 import { Box, Button, Paper, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import { Player } from '@remotion/player';
 import { useState } from 'react';
@@ -12,7 +13,9 @@ type ReelDetailPageProps = {
   reel: Reel | null;
   frameUrls: string[];
   isLoading: boolean;
+  isDeleting: boolean;
   isExtracting: boolean;
+  onDelete: () => void;
   onExtractSequence: () => void;
 };
 
@@ -21,7 +24,9 @@ export const ReelDetailPage = ({
   reel,
   frameUrls,
   isLoading,
+  isDeleting,
   isExtracting,
+  onDelete,
   onExtractSequence,
 }: Readonly<ReelDetailPageProps>) => {
   const [playerMode, setPlayerMode] = useState<'animated' | 'step'>('animated');
@@ -103,6 +108,16 @@ export const ReelDetailPage = ({
             disabled={isExtracting}
           >
             Extract sequence
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={onDelete}
+            disabled={isDeleting}
+          >
+            Delete video
           </Button>
           <ToggleButtonGroup
             value={playerMode}

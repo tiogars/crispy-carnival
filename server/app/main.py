@@ -938,6 +938,23 @@ def get_reels(film_id: str) -> ReelsResponse:
     return ReelsResponse(reels=response)
 
 
+@app.delete(
+    '/api/filesystem/films/{film_id}/reels/{reel_id}',
+    status_code=204,
+    responses={
+        404: {'description': 'Reel not found.'},
+    },
+)
+def delete_reel(film_id: str, reel_id: str) -> None:
+    film_path = _get_film_path_or_404(film_id)
+    reel_path = _safe_join(film_path, reel_id)
+
+    if not reel_path.exists() or not reel_path.is_dir() or reel_path.name == WITNESS_VIDEOS_DIRNAME:
+        raise HTTPException(status_code=404, detail='Reel not found.')
+
+    shutil.rmtree(reel_path)
+
+
 @app.get(
     '/api/filesystem/films/{film_id}/reels/{reel_id}/frames',
     responses={

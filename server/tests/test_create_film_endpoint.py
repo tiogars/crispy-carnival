@@ -216,6 +216,28 @@ def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
     }
 
 
+def test_delete_reel_removes_selected_reel_folder(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    reel_path = tmp_path / 'test_film' / 'reel_001'
+    reel_path.mkdir(parents=True, exist_ok=True)
+    (reel_path / 'frame0001.jpg').write_bytes(b'x')
+
+    response = client.delete('/api/filesystem/films/test_film/reels/reel_001')
+
+    assert response.status_code == 204
+    assert not reel_path.exists()
+
+
+def test_delete_reel_returns_404_when_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    (tmp_path / 'test_film').mkdir(parents=True, exist_ok=True)
+
+    response = client.delete('/api/filesystem/films/test_film/reels/missing_reel')
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Reel not found.'}
+
+
 def test_upload_reel_video_creates_reel_folder_from_uploaded_video(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)

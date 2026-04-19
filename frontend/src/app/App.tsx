@@ -166,6 +166,8 @@ export const App = () => {
   const [isDeletingFilm, setDeletingFilm] = useState<boolean>(false);
   const [isDeleteWitnessDialogOpen, setDeleteWitnessDialogOpen] = useState<boolean>(false);
   const [isDeletingWitnessVideo, setDeletingWitnessVideo] = useState<boolean>(false);
+  const [isDeleteReelDialogOpen, setDeleteReelDialogOpen] = useState<boolean>(false);
+  const [isDeletingReel, setDeletingReel] = useState<boolean>(false);
   const [isSequenceExtractionDialogOpen, setSequenceExtractionDialogOpen] = useState<boolean>(false);
   const [isStartingSequenceExtraction, setStartingSequenceExtraction] = useState<boolean>(false);
   const [sequenceExtractionValues, setSequenceExtractionValues] = useState<SequenceExtractionFormValues>(
@@ -515,6 +517,30 @@ export const App = () => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to delete witness video.');
     } finally {
       setDeletingWitnessVideo(false);
+    }
+  };
+
+  const submitReelDelete = async () => {
+    if (!selectedFilmId || !currentReel) {
+      setErrorMessage('Select a reel to delete.');
+      return;
+    }
+
+    setDeletingReel(true);
+    setErrorMessage('');
+
+    const deletedReelId = currentReel.id;
+
+    try {
+      await deleteRequest(`/api/filesystem/films/${selectedFilmId}/reels/${encodeURIComponent(deletedReelId)}`);
+      await loadReelsForFilm(selectedFilmId);
+      setSelectedNavigationNode(`reels-${selectedFilmId}`);
+      setSuccessMessage(`Reel "${deletedReelId}" deleted successfully.`);
+      setDeleteReelDialogOpen(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete reel.');
+    } finally {
+      setDeletingReel(false);
     }
   };
 
@@ -970,7 +996,9 @@ export const App = () => {
               reel={currentReel}
               frameUrls={frameUrls}
               isLoading={isLoading}
+              isDeleting={isDeletingReel}
               isExtracting={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
+              onDelete={() => setDeleteReelDialogOpen(true)}
               onExtractSequence={() => {
                 if (!currentReel) {
                   return;
@@ -984,6 +1012,38 @@ export const App = () => {
           )}
         </Box>
       </Box>
+
+      <Dialog
+        open={isDeleteReelDialogOpen}
+        onClose={() => {
+          if (!isDeletingReel) {
+            setDeleteReelDialogOpen(false);
+          }
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Confirm reel deletion</DialogTitle>
+        <DialogContent dividers>
+          <p>Delete reel "{currentReel?.id ?? ''}"?</p>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteReelDialogOpen(false)} disabled={isDeletingReel}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            color="error"
+            variant="contained"
+            onClick={() => {
+              void submitReelDelete();
+            }}
+            disabled={isDeletingReel || !currentReel}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <CreateFilmDialog
         open={isCreateFilmDialogOpen}
