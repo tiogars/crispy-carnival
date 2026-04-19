@@ -132,6 +132,11 @@ const defaultSequenceExtractionValues: SequenceExtractionFormValues = {
   overwriteExisting: false,
 };
 
+type SequenceExtractionSource = {
+  type: 'witness' | 'reel';
+  name: string;
+};
+
 export const App = () => {
   const [selectedNavigationNode, setSelectedNavigationNode] = useState<NavigationNode | ''>('home' as NavigationNode);
   const [films, setFilms] = useState<Film[]>([]);
@@ -166,6 +171,7 @@ export const App = () => {
   const [sequenceExtractionValues, setSequenceExtractionValues] = useState<SequenceExtractionFormValues>(
     defaultSequenceExtractionValues,
   );
+  const [sequenceExtractionSource, setSequenceExtractionSource] = useState<SequenceExtractionSource | null>(null);
   const [sequenceExtractionErrorMessage, setSequenceExtractionErrorMessage] = useState<string>('');
   const [sequenceExtractionJob, setSequenceExtractionJob] = useState<SequenceExtractionJobStatusResponse | null>(null);
   const [sequenceExtractionHistory, setSequenceExtractionHistory] = useState<SequenceExtractionJobStatusResponse[]>([]);
@@ -296,6 +302,7 @@ export const App = () => {
     }
 
     setSequenceExtractionDialogOpen(false);
+    setSequenceExtractionSource(null);
     setSequenceExtractionErrorMessage('');
   };
 
@@ -562,8 +569,8 @@ export const App = () => {
   };
 
   const submitSequenceExtraction = async () => {
-    if (!selectedFilmId || !currentWitness) {
-      setSequenceExtractionErrorMessage('Select a film and a witness video before starting extraction.');
+    if (!selectedFilmId || !sequenceExtractionSource) {
+      setSequenceExtractionErrorMessage('Select a film and a source video before starting extraction.');
       return;
     }
 
@@ -590,8 +597,12 @@ export const App = () => {
     setSequenceExtractionErrorMessage('');
 
     try {
+      const endpoint = sequenceExtractionSource.type === 'witness'
+        ? `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(sequenceExtractionSource.name)}/sequence-extraction`
+        : `/api/filesystem/films/${selectedFilmId}/reels/${encodeURIComponent(sequenceExtractionSource.name)}/sequence-extraction`;
+
       const payload = await postJson<SequenceExtractionAcceptedResponse>(
-        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(currentWitness.fileName)}/sequence-extraction`,
+        endpoint,
         {
           targetFps,
           sceneThreshold,
@@ -729,6 +740,7 @@ export const App = () => {
 
   useEffect(() => {
     setSequenceExtractionDialogOpen(false);
+    setSequenceExtractionSource(null);
     setSequenceExtractionErrorMessage('');
     setSequenceExtractionJob(null);
     resetSequenceExtractionDefaults();
@@ -928,6 +940,11 @@ export const App = () => {
               isExtracting={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
               onDelete={() => setDeleteWitnessDialogOpen(true)}
               onExtractSequence={() => {
+                if (!currentWitness) {
+                  return;
+                }
+
+                setSequenceExtractionSource({ type: 'witness', name: currentWitness.fileName });
                 setSequenceExtractionDialogOpen(true);
                 setSequenceExtractionErrorMessage('');
               }}
@@ -953,6 +970,16 @@ export const App = () => {
               reel={currentReel}
               frameUrls={frameUrls}
               isLoading={isLoading}
+              isExtracting={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
+              onExtractSequence={() => {
+                if (!currentReel) {
+                  return;
+                }
+
+                setSequenceExtractionSource({ type: 'reel', name: currentReel.id });
+                setSequenceExtractionDialogOpen(true);
+                setSequenceExtractionErrorMessage('');
+              }}
             />
           )}
         </Box>
@@ -1044,7 +1071,8 @@ export const App = () => {
       <SequenceExtractionDialog
         open={isSequenceExtractionDialogOpen}
         selectedFilmId={selectedFilmId}
-        selectedWitnessVideoName={currentWitness?.fileName ?? ''}
+        selectedSourceLabel={sequenceExtractionSource?.type === 'reel' ? 'Reel video' : 'Witness video'}
+        selectedSourceName={sequenceExtractionSource?.name ?? ''}
         isSubmitting={isStartingSequenceExtraction}
         values={sequenceExtractionValues}
         jobStatus={sequenceExtractionJob}

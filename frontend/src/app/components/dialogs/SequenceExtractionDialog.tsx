@@ -156,7 +156,9 @@ const ProgressStatusPanel = ({
 type SequenceExtractionDialogProps = {
   open: boolean;
   selectedFilmId: string;
-  selectedWitnessVideoName: string;
+  selectedSourceLabel?: string;
+  selectedSourceName?: string;
+  selectedWitnessVideoName?: string;
   isSubmitting: boolean;
   values: SequenceExtractionFormValues;
   jobStatus: SequenceExtractionJobStatusResponse | null;
@@ -170,6 +172,8 @@ type SequenceExtractionDialogProps = {
 export const SequenceExtractionDialog = ({
   open,
   selectedFilmId,
+  selectedSourceLabel = 'Witness video',
+  selectedSourceName,
   selectedWitnessVideoName,
   isSubmitting,
   values,
@@ -184,6 +188,7 @@ export const SequenceExtractionDialog = ({
   const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   const statusSeverity = getStatusSeverity(jobStatus?.status);
   const hasProgressValue = typeof jobStatus?.progressPercent === 'number';
+  const resolvedSourceName = selectedSourceName ?? selectedWitnessVideoName ?? '';
   const displayedElapsedSeconds = useMemo(
     () => getDerivedElapsedSeconds(jobStatus, currentTimestamp),
     [currentTimestamp, jobStatus],
@@ -220,9 +225,9 @@ export const SequenceExtractionDialog = ({
 
           <Box>
             <Typography variant="subtitle2" color="text.secondary">
-              Witness video
+              {selectedSourceLabel}
             </Typography>
-            <Typography sx={{ fontWeight: 700 }}>{selectedWitnessVideoName || 'No witness video selected'}</Typography>
+            <Typography sx={{ fontWeight: 700 }}>{resolvedSourceName || `No ${selectedSourceLabel.toLowerCase()} selected`}</Typography>
           </Box>
 
           <Alert severity="info">

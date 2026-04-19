@@ -22,6 +22,7 @@ IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'}
 VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'}
 WITNESS_VIDEOS_DIRNAME = '_witness_videos'
 EXTRACTION_METADATA_FILENAME = '_sequence_extraction.json'
+REEL_SOURCE_VIDEO_PREFIX = '_source_video'
 JOB_STATUS_QUEUED = 'queued'
 JOB_STATUS_RUNNING = 'running'
 JOB_STATUS_SUCCEEDED = 'succeeded'
@@ -274,6 +275,37 @@ def _get_witness_video_path_or_404(film_id: str, file_name: str) -> tuple[Path, 
     return film_path, video_path
 
 
+def _find_reel_source_video_path(reel_path: Path) -> Path | None:
+    candidates = [
+        child
+        for child in reel_path.iterdir()
+        if child.is_file()
+        and child.stem == REEL_SOURCE_VIDEO_PREFIX
+        and child.suffix.lower() in VIDEO_SUFFIXES
+    ]
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda path: path.name.lower())
+    return candidates[0]
+
+
+def _get_reel_source_video_path_or_404(film_id: str, reel_id: str) -> tuple[Path, Path]:
+    film_path = _get_film_path_or_404(film_id)
+    reel_path = _safe_join(film_path, reel_id)
+
+    if not reel_path.exists() or not reel_path.is_dir():
+        raise HTTPException(status_code=404, detail='Reel not found.')
+
+    source_video_path = _find_reel_source_video_path(reel_path)
+
+    if source_video_path is None:
+        raise HTTPException(status_code=404, detail='Source reel video not found. Re-import the reel from video to enable extraction.')
+
+    return film_path, source_video_path
+
+
 def _remove_witness_frames_if_present(film_id: str, file_name: str) -> None:
     film_path = _get_film_path_or_404(film_id)
     witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
@@ -326,7 +358,7 @@ def _build_sequence_extraction_command(
     min_spacing_seconds: float,
 ) -> list[str]:
     select_expression = _build_select_expression(scene_threshold, min_spacing_seconds)
-    filter_graph = f"fps={target_fps},select='{select_expression}'"
+    filter_graph = f"fps={target_fps},select='{select_expression}',showinfo"
 
     return [
         'ffmpeg',
@@ -485,6 +517,50 @@ def _get_media_frame_count(video_path: Path) -> int | None:
     return None
 
 
+def _get_video_fps(video_path: Path) -> float | None:
+    ffprobe_path = shutil.which('ffprobe')
+
+    if ffprobe_path is None:
+        return None
+
+    result = subprocess.run(
+        [
+            ffprobe_path,
+            '-v',
+            'error',
+            '-select_streams',
+            'v:0',
+            '-show_entries',
+            'stream=r_frame_rate',
+            '-of',
+            'default=noprint_wrappers=1:nokey=1',
+            str(video_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        return None
+
+    raw = result.stdout.strip()
+
+    if '/' in raw:
+        try:
+            num, den = raw.split('/', 1)
+            fps = int(num) / int(den)
+            return fps if fps > 0 else None
+        except (ValueError, ZeroDivisionError):
+            return None
+
+    try:
+        fps = float(raw)
+        return fps if fps > 0 else None
+    except ValueError:
+        return None
+
+
 def _parse_ffmpeg_progress_seconds(progress_line: str) -> float | None:
     if progress_line.startswith('out_time_ms='):
         try:
@@ -570,13 +646,31 @@ def _execute_sequence_extraction_command(
     job_id: str,
     command: list[str],
     duration_seconds: float | None,
-) -> None:
+) -> list[float]:
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
+    pts_times: list[float] = []
+    stderr_lines: list[str] = []
+
+    def _read_stderr() -> None:
+        assert process.stderr is not None
+        for line in process.stderr:
+            stripped = line.strip()
+            stderr_lines.append(stripped)
+            match = re.search(r'\bpts_time:(\S+)', stripped)
+            if match:
+                try:
+                    pts_times.append(float(match.group(1)))
+                except ValueError:
+                    pass
+
+    stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+    stderr_thread.start()
 
     assert process.stdout is not None
 
@@ -587,11 +681,37 @@ def _execute_sequence_extraction_command(
         if progress_seconds is not None:
             _update_extraction_runtime_progress(job_id, progress_seconds, duration_seconds)
 
-    stderr_output = process.stderr.read() if process.stderr is not None else ''
+    stderr_thread.join()
     return_code = process.wait()
 
     if return_code != 0:
+        stderr_output = '\n'.join(stderr_lines)
         raise subprocess.CalledProcessError(return_code, command, output='', stderr=stderr_output)
+
+    return pts_times
+
+
+def _rename_frames_to_original_numbers(output_dir: Path, pts_times: list[float], original_fps: float) -> None:
+    image_files = sorted(output_dir.glob('frame*.jpg'))
+    pairs = list(zip(image_files, pts_times))
+
+    renames: list[tuple[Path, Path]] = []
+    used_names: set[str] = set()
+
+    for frame_file, pts_time in pairs:
+        frame_number = round(pts_time * original_fps)
+        new_name = f'frame{frame_number:05d}.jpg'
+
+        while new_name in used_names:
+            frame_number += 1
+            new_name = f'frame{frame_number:05d}.jpg'
+
+        used_names.add(new_name)
+        renames.append((frame_file, output_dir / new_name))
+
+    for source, target in sorted(renames, key=lambda x: x[1].name, reverse=True):
+        if source != target:
+            source.rename(target)
 
 
 def _write_sequence_extraction_metadata(
@@ -646,7 +766,8 @@ def _run_sequence_extraction_job(
     )
 
     try:
-        output_dir.mkdir(parents=False, exist_ok=False)
+        output_dir.mkdir(parents=True, exist_ok=False)
+        original_fps = _get_video_fps(video_path)
         duration_seconds = _get_media_duration_seconds(video_path)
 
         _update_sequence_extraction_job(
@@ -669,7 +790,10 @@ def _run_sequence_extraction_job(
             min_spacing_seconds=payload.minSpacingSeconds,
         )
 
-        _execute_sequence_extraction_command(job_id, command, duration_seconds)
+        pts_times = _execute_sequence_extraction_command(job_id, command, duration_seconds)
+
+        if original_fps is not None and pts_times:
+            _rename_frames_to_original_numbers(output_dir, pts_times, original_fps)
         _update_sequence_extraction_job(
             job_id,
             progressPercent=98,
@@ -886,13 +1010,15 @@ def upload_reel_video(
 
     target_path.mkdir(parents=False, exist_ok=False)
 
+    source_video_path = target_path / f'{REEL_SOURCE_VIDEO_PREFIX}{Path(file_name).suffix.lower()}'
     temp_video_path = target_path / f'_upload_{uuid4().hex}{Path(file_name).suffix}'
 
     try:
         with temp_video_path.open('wb') as output_stream:
             shutil.copyfileobj(file.file, output_stream)
 
-        _import_reel_video_frames(temp_video_path, target_path)
+        shutil.copy2(temp_video_path, source_video_path)
+        _import_reel_video_frames(source_video_path, target_path)
         frame_count = _count_image_files(target_path)
 
         if frame_count == 0:
@@ -1050,14 +1176,12 @@ def start_sequence_extraction(
         raise HTTPException(status_code=503, detail='FFmpeg is not available in the server runtime environment.')
 
     film_path, video_path = _get_witness_video_path_or_404(film_id, file_name)
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
     output_reel_id = _build_output_reel_id(payload.outputReelName, file_name)
-    output_dir = _safe_join(film_path, output_reel_id)
-
-    if output_reel_id == WITNESS_VIDEOS_DIRNAME:
-        raise HTTPException(status_code=400, detail='Output reel name is reserved.')
+    output_dir = _safe_join(witness_videos_path, output_reel_id)
 
     if output_dir.exists() and not payload.overwriteExisting:
-        raise HTTPException(status_code=409, detail='A reel with this name already exists.')
+        raise HTTPException(status_code=409, detail='An extraction folder with this name already exists.')
 
     if output_dir.exists() and payload.overwriteExisting:
         shutil.rmtree(output_dir, ignore_errors=True)
@@ -1098,6 +1222,82 @@ def start_sequence_extraction(
         status=JOB_STATUS_QUEUED,
         filmId=film_id,
         witnessVideoName=Path(file_name).name,
+        statusUrl=f'/api/sequence-extraction/jobs/{job_id}',
+    )
+
+
+@app.post(
+    '/api/filesystem/films/{film_id}/reels/{reel_id}/sequence-extraction',
+    status_code=202,
+    responses={
+        400: {'description': 'Invalid extraction parameters.'},
+        404: {'description': 'Film, reel, or reel source video not found.'},
+        409: {'description': 'Output reel already exists.'},
+        503: {'description': 'FFmpeg is not available.'},
+    },
+)
+def start_reel_sequence_extraction(
+    film_id: str,
+    reel_id: str,
+    payload: SequenceExtractionRequest,
+    background_tasks: BackgroundTasks,
+) -> SequenceExtractionAcceptedResponse:
+    _validate_sequence_extraction_request(payload)
+
+    if not _ffmpeg_is_available():
+        raise HTTPException(status_code=503, detail='FFmpeg is not available in the server runtime environment.')
+
+    film_path, source_video_path = _get_reel_source_video_path_or_404(film_id, reel_id)
+    output_reel_id = _build_output_reel_id(payload.outputReelName, reel_id)
+    output_dir = _safe_join(film_path, output_reel_id)
+
+    if output_reel_id == WITNESS_VIDEOS_DIRNAME:
+        raise HTTPException(status_code=400, detail='Output reel name is reserved.')
+
+    if output_dir.exists() and not payload.overwriteExisting:
+        raise HTTPException(status_code=409, detail='A reel with this name already exists.')
+
+    if output_dir.exists() and payload.overwriteExisting:
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+    job_id = f'seqext_{uuid4().hex}'
+    job = SequenceExtractionJobStatusResponse(
+        jobId=job_id,
+        status=JOB_STATUS_QUEUED,
+        filmId=film_id,
+        witnessVideoName=source_video_path.name,
+        outputReelId=output_reel_id,
+        progressPercent=0,
+        progressRatePercentPerSecond=None,
+        progressLabel='Queued',
+        currentStep=0,
+        totalSteps=4,
+        elapsedSeconds=0.0,
+        estimatedRemainingSeconds=None,
+        startedAt=None,
+        finishedAt=None,
+        message='Sequence extraction job accepted.',
+    )
+
+    with SEQUENCE_EXTRACTION_JOBS_LOCK:
+        SEQUENCE_EXTRACTION_JOBS[job_id] = job
+
+    background_tasks.add_task(
+        _run_sequence_extraction_job,
+        job_id,
+        film_id,
+        source_video_path.name,
+        source_video_path,
+        output_dir,
+        output_reel_id,
+        payload,
+    )
+
+    return SequenceExtractionAcceptedResponse(
+        jobId=job_id,
+        status=JOB_STATUS_QUEUED,
+        filmId=film_id,
+        witnessVideoName=source_video_path.name,
         statusUrl=f'/api/sequence-extraction/jobs/{job_id}',
     )
 

@@ -1,4 +1,5 @@
-import { Box, Paper, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Box, Button, Paper, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import ExtensionIcon from '@mui/icons-material/Extension';
 import { Player } from '@remotion/player';
 import { useState } from 'react';
 
@@ -11,6 +12,8 @@ type ReelDetailPageProps = {
   reel: Reel | null;
   frameUrls: string[];
   isLoading: boolean;
+  isExtracting: boolean;
+  onExtractSequence: () => void;
 };
 
 export const ReelDetailPage = ({
@@ -18,6 +21,8 @@ export const ReelDetailPage = ({
   reel,
   frameUrls,
   isLoading,
+  isExtracting,
+  onExtractSequence,
 }: Readonly<ReelDetailPageProps>) => {
   const [playerMode, setPlayerMode] = useState<'animated' | 'step'>('animated');
 
@@ -80,7 +85,25 @@ export const ReelDetailPage = ({
           flexDirection: 'column',
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 1,
+            marginBottom: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<ExtensionIcon />}
+            onClick={onExtractSequence}
+            disabled={isExtracting}
+          >
+            Extract sequence
+          </Button>
           <ToggleButtonGroup
             value={playerMode}
             exclusive
