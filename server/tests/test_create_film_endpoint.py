@@ -29,6 +29,14 @@ def test_create_film_returns_exact_500_payload_on_unexpected_error(monkeypatch, 
 
 def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
+
+    def fake_import(_video_path: Path, output_dir: Path) -> None:
+        (output_dir / 'frame00001.jpg').write_bytes(b'1')
+        (output_dir / 'frame00002.jpg').write_bytes(b'2')
+
+    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
+
     film_path = tmp_path / 'test_film'
     film_path.mkdir(parents=True, exist_ok=True)
 
@@ -42,9 +50,11 @@ def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypat
         'fileName': 'witness.mp4',
         'mediaUrl': '/media/test_film/_witness_videos/witness.mp4',
         'fileSizeBytes': 11,
-        'frameCount': None,
+        'frameCount': 2,
     }
     assert (film_path / '_witness_videos' / 'witness.mp4').read_bytes() == b'video-bytes'
+    assert (film_path / '_witness_videos' / 'witness_mp4_frames' / 'frame00001.jpg').exists()
+    assert (film_path / '_witness_videos' / 'witness_mp4_frames' / 'frame00002.jpg').exists()
 
 
 def test_delete_film_removes_film_directory(monkeypatch, tmp_path: Path):
@@ -82,9 +92,19 @@ def test_upload_witness_video_returns_404_when_film_does_not_exist(monkeypatch, 
 
 def test_upload_witness_video_overwrites_existing_file_when_flag_is_true(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
+
+    def fake_import(_video_path: Path, output_dir: Path) -> None:
+        (output_dir / 'frame00001.jpg').write_bytes(b'new-frame')
+
+    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
+
     video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    witness_frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness_mp4_frames'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'old-bytes')
+    witness_frames_path.mkdir(parents=True, exist_ok=True)
+    (witness_frames_path / 'frame00001.jpg').write_bytes(b'old-frame')
 
     response = client.post(
         '/api/filesystem/films/test_film/witness-video',
@@ -94,6 +114,37 @@ def test_upload_witness_video_overwrites_existing_file_when_flag_is_true(monkeyp
 
     assert response.status_code == 201
     assert video_path.read_bytes() == b'new-bytes'
+    assert (witness_frames_path / 'frame00001.jpg').read_bytes() == b'new-frame'
+
+
+def test_upload_witness_video_returns_503_for_mp4_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
+    film_path = tmp_path / 'test_film'
+    film_path.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/witness-video',
+        files={'file': ('witness.mp4', b'video-bytes', 'video/mp4')},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'FFmpeg is required to import witness MP4 videos.'}
+
+
+def test_upload_witness_video_does_not_require_ffmpeg_for_non_mp4(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
+    film_path = tmp_path / 'test_film'
+    film_path.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/witness-video',
+        files={'file': ('witness.mov', b'video-bytes', 'video/quicktime')},
+    )
+
+    assert response.status_code == 201
+    assert response.json()['frameCount'] is None
 
 
 def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
@@ -102,6 +153,9 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     witness_folder.mkdir(parents=True, exist_ok=True)
     (witness_folder / 'b.mov').write_bytes(b'1')
     (witness_folder / 'a.mp4').write_bytes(b'2')
+    (witness_folder / 'a_mp4_frames').mkdir(parents=True, exist_ok=True)
+    (witness_folder / 'a_mp4_frames' / 'frame00001.jpg').write_bytes(b'frame-1')
+    (witness_folder / 'a_mp4_frames' / 'frame00002.jpg').write_bytes(b'frame-2')
     (witness_folder / 'ignore.txt').write_text('x')
 
     response = client.get('/api/filesystem/films/test_film/witness-videos')
@@ -109,7 +163,7 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert response.json() == {
         'videos': [
-            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a.mp4', 'fileSizeBytes': 1, 'frameCount': None},
+            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a.mp4', 'fileSizeBytes': 1, 'frameCount': 2},
             {'fileName': 'b.mov', 'mediaUrl': '/media/test_film/_witness_videos/b.mov', 'fileSizeBytes': 1, 'frameCount': None},
         ]
     }
@@ -118,13 +172,17 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
 def test_delete_witness_video_removes_selected_file(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness_mp4_frames'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'video-bytes')
+    frames_path.mkdir(parents=True, exist_ok=True)
+    (frames_path / 'frame00001.jpg').write_bytes(b'frame')
 
     response = client.delete('/api/filesystem/films/test_film/witness-videos/witness.mp4')
 
     assert response.status_code == 204
     assert not video_path.exists()
+    assert not frames_path.exists()
 
 
 def test_delete_witness_video_returns_404_when_missing(monkeypatch, tmp_path: Path):

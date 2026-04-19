@@ -66,9 +66,6 @@ export const ReelDetailPage = ({
         <Typography color="text.secondary" variant="body2" sx={{ marginBottom: 1 }}>
           {film.displayName}
         </Typography>
-        <Typography color="text.secondary" variant="body2">
-          {reel.frameCount} frames
-        </Typography>
       </Paper>
 
       <Paper
@@ -128,9 +125,50 @@ export const ReelDetailPage = ({
           <ImageStepPlayer frameUrls={frameUrls} />
         )}
 
-        <Typography color="text.secondary" sx={{ marginTop: 1 }}>
-          {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
-        </Typography>
+        <Box
+          sx={{
+            marginTop: 1,
+            padding: 1.25,
+            borderRadius: 1,
+            backgroundColor: '#121a24',
+            border: '1px solid rgba(144, 202, 249, 0.28)',
+            display: 'grid',
+            gap: 0.5,
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ color: '#ffffff', fontWeight: 700 }}>
+            Details
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(90px, auto) 1fr', columnGap: 1, rowGap: 0.5 }}>
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Reel
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe', wordBreak: 'break-word' }}>
+              {reel.id}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Film
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {film.displayName}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Frames
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {reel.frameCount}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Playback
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
+            </Typography>
+          </Box>
+        </Box>
       </Paper>
     </Box>
   );

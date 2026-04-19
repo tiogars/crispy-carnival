@@ -28,6 +28,33 @@ JOB_STATUS_SUCCEEDED = 'succeeded'
 JOB_STATUS_FAILED = 'failed'
 
 
+def _build_witness_frames_dir_name(file_name: str) -> str:
+    stem = re.sub(r'[^a-zA-Z0-9]+', '_', Path(file_name).stem.lower()).strip('_')
+
+    if not stem:
+        stem = 'witness'
+
+    suffix = re.sub(r'[^a-zA-Z0-9]+', '_', Path(file_name).suffix.lower()).strip('_')
+
+    if not suffix:
+        suffix = 'video'
+
+    return f'{stem}_{suffix}_frames'
+
+
+def _get_witness_frames_path(witness_videos_path: Path, file_name: str) -> Path:
+    return _safe_join(witness_videos_path, _build_witness_frames_dir_name(file_name))
+
+
+def _get_witness_frame_count(witness_videos_path: Path, file_name: str) -> int | None:
+    frames_path = _get_witness_frames_path(witness_videos_path, file_name)
+
+    if not frames_path.exists() or not frames_path.is_dir():
+        return None
+
+    return _count_image_files(frames_path)
+
+
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat().replace('+00:00', 'Z')
 
@@ -245,6 +272,19 @@ def _get_witness_video_path_or_404(film_id: str, file_name: str) -> tuple[Path, 
         raise HTTPException(status_code=404, detail='Witness video not found.')
 
     return film_path, video_path
+
+
+def _remove_witness_frames_if_present(film_id: str, file_name: str) -> None:
+    film_path = _get_film_path_or_404(film_id)
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+
+    if not witness_videos_path.exists() or not witness_videos_path.is_dir():
+        return
+
+    frames_path = _get_witness_frames_path(witness_videos_path, file_name)
+
+    if frames_path.exists() and frames_path.is_dir():
+        shutil.rmtree(frames_path, ignore_errors=True)
 
 
 def _build_output_reel_id(requested_name: str | None, witness_video_name: str) -> str:
@@ -882,6 +922,7 @@ def upload_reel_video(
         404: {'description': 'Film not found.'},
         409: {'description': 'A witness video with this name already exists.'},
         500: {'description': 'Error during witness video upload.'},
+        503: {'description': 'FFmpeg is required to import witness MP4 videos.'},
     },
 )
 def upload_witness_video(
@@ -900,14 +941,40 @@ def upload_witness_video(
     witness_videos_path.mkdir(parents=False, exist_ok=True)
 
     target_path = _safe_join(witness_videos_path, file_name)
+    frames_path = _get_witness_frames_path(witness_videos_path, file_name)
+    should_extract_frames = Path(file_name).suffix.lower() == '.mp4'
+
+    if should_extract_frames and not _ffmpeg_is_available():
+        raise HTTPException(status_code=503, detail='FFmpeg is required to import witness MP4 videos.')
 
     if target_path.exists() and not overwrite:
         raise HTTPException(status_code=409, detail='A witness video with this name already exists.')
 
+    if overwrite and frames_path.exists() and frames_path.is_dir():
+        shutil.rmtree(frames_path, ignore_errors=True)
+
+    extracted_frame_count: int | None = None
+
     try:
         with target_path.open('wb') as output_stream:
             shutil.copyfileobj(file.file, output_stream)
+
+        if should_extract_frames:
+            if frames_path.exists():
+                if frames_path.is_dir():
+                    shutil.rmtree(frames_path, ignore_errors=True)
+                else:
+                    frames_path.unlink()
+
+            frames_path.mkdir(parents=False, exist_ok=False)
+            _import_reel_video_frames(target_path, frames_path)
+            extracted_frame_count = _count_image_files(frames_path)
+
+            if extracted_frame_count == 0:
+                raise RuntimeError('No frames were generated from the uploaded witness video.')
     except Exception as error:
+        if should_extract_frames and frames_path.exists() and frames_path.is_dir():
+            shutil.rmtree(frames_path, ignore_errors=True)
         raise HTTPException(status_code=500, detail='Error during witness video upload.') from error
     finally:
         file.file.close()
@@ -916,7 +983,7 @@ def upload_witness_video(
         fileName=file_name,
         mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
         fileSizeBytes=target_path.stat().st_size,
-        frameCount=_get_media_frame_count(target_path),
+        frameCount=extracted_frame_count if extracted_frame_count is not None else _get_media_frame_count(target_path),
     )
 
 
@@ -939,7 +1006,7 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
             fileName=file_name,
             mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
             fileSizeBytes=(witness_videos_path / file_name).stat().st_size,
-            frameCount=None,
+            frameCount=_get_witness_frame_count(witness_videos_path, file_name),
         )
         for file_name in _list_video_filenames(witness_videos_path)
     ]
@@ -958,6 +1025,7 @@ def delete_witness_video(film_id: str, file_name: str) -> None:
     _, video_path = _get_witness_video_path_or_404(film_id, file_name)
 
     video_path.unlink()
+    _remove_witness_frames_if_present(film_id, file_name)
 
 
 @app.post(
