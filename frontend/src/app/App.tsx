@@ -1,4 +1,4 @@
-import { Box } from '@mui/material';
+import { Box, Paper, Typography } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,8 +21,14 @@ import {
   WitnessVideosResponse,
 } from './App.types';
 import { AppFooter } from './components/AppFooter';
+import { AppNavigationTree } from './components/AppNavigationTree';
+import { DashboardPage } from './components/DashboardPage';
 import { FilmPreviewSection } from './components/FilmPreviewSection';
 import { FilmSidebar } from './components/FilmSidebar';
+import { ReelDetailPage } from './components/ReelDetailPage';
+import { ReelsPage } from './components/ReelsPage';
+import { WitnessDetailPage } from './components/WitnessDetailPage';
+import { WitnessesPage } from './components/WitnessesPage';
 import { CreateFilmDialog } from './components/dialogs/CreateFilmDialog';
 import { DeleteWitnessDialog } from './components/dialogs/DeleteWitnessDialog';
 import { SequenceExtractionDialog } from './components/dialogs/SequenceExtractionDialog';
@@ -124,10 +130,12 @@ const defaultSequenceExtractionValues: SequenceExtractionFormValues = {
 };
 
 export const App = () => {
+  const [selectedNavigationNode, setSelectedNavigationNode] = useState<string>('home');
   const [films, setFilms] = useState<Film[]>([]);
   const [selectedFilmId, setSelectedFilmId] = useState<string>('');
   const [reels, setReels] = useState<Reel[]>([]);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
+  const [reelsByFilmId, setReelsByFilmId] = useState<Record<string, Reel[]>>({});
   const [frameUrls, setFrameUrls] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -138,7 +146,9 @@ export const App = () => {
   const [isUploadingWitnessVideo, setUploadingWitnessVideo] = useState<boolean>(false);
   const [overwriteWitnessVideo, setOverwriteWitnessVideo] = useState<boolean>(false);
   const [witnessVideos, setWitnessVideos] = useState<UploadWitnessVideoResponse[]>([]);
+  const [witnessesByFilmId, setWitnessesByFilmId] = useState<Record<string, UploadWitnessVideoResponse[]>>({});
   const [selectedWitnessVideoUrl, setSelectedWitnessVideoUrl] = useState<string>('');
+  const [selectedWitnessFileName, setSelectedWitnessFileName] = useState<string>('');
   const [isDeleteWitnessDialogOpen, setDeleteWitnessDialogOpen] = useState<boolean>(false);
   const [isDeletingWitnessVideo, setDeletingWitnessVideo] = useState<boolean>(false);
   const [isSequenceExtractionDialogOpen, setSequenceExtractionDialogOpen] = useState<boolean>(false);
@@ -192,13 +202,18 @@ export const App = () => {
     }
   }, []);
 
-  const loadReels = useCallback(
-    async (filmId: string, preferredReelId?: string) => {
-      setIsLoading(true);
-      setErrorMessage('');
+  const loadReelsForFilm = useCallback(async (filmId: string, preferredReelId?: string) => {
+    setIsLoading(true);
+    setErrorMessage('');
 
-      try {
-        const payload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${filmId}/reels`);
+    try {
+      const payload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${filmId}/reels`);
+      setReelsByFilmId((prev) => ({
+        ...prev,
+        [filmId]: payload.reels,
+      }));
+
+      if (filmId === selectedFilmId) {
         setReels(payload.reels);
 
         if (payload.reels.length === 0) {
@@ -218,14 +233,13 @@ export const App = () => {
 
           return payload.reels[0].id;
         });
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to load reels.');
-      } finally {
-        setIsLoading(false);
       }
-    },
-    [],
-  );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load reels.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedFilmId]);
 
   useEffect(() => {
     void loadFilms();
@@ -273,36 +287,51 @@ export const App = () => {
     setSequenceExtractionErrorMessage('');
   };
 
-  const loadWitnessVideos = useCallback(async (preferredMediaUrl?: string) => {
-    if (!selectedFilmId) {
+  const loadWitnessVideos = useCallback(async (filmId?: string, preferredMediaUrl?: string) => {
+    const targetFilmId = filmId || selectedFilmId;
+
+    if (!targetFilmId) {
       setWitnessVideos([]);
       setSelectedWitnessVideoUrl('');
       return;
     }
 
     try {
-      const payload = await fetchJson<WitnessVideosResponse>(`/api/filesystem/films/${selectedFilmId}/witness-videos`);
+      const payload = await fetchJson<WitnessVideosResponse>(`/api/filesystem/films/${targetFilmId}/witness-videos`);
 
       const resolvedVideos = payload.videos.map((video) => ({
         ...video,
         mediaUrl: video.mediaUrl.startsWith('http') ? video.mediaUrl : `${apiBaseUrl}${video.mediaUrl}`,
       }));
 
-      setWitnessVideos(resolvedVideos);
-      setSelectedWitnessVideoUrl((currentVideoUrl) => {
-        if (preferredMediaUrl && resolvedVideos.some((video) => video.mediaUrl === preferredMediaUrl)) {
-          return preferredMediaUrl;
-        }
+      setWitnessesByFilmId((prev) => ({
+        ...prev,
+        [targetFilmId]: resolvedVideos,
+      }));
 
-        if (currentVideoUrl && resolvedVideos.some((video) => video.mediaUrl === currentVideoUrl)) {
-          return currentVideoUrl;
-        }
+      if (targetFilmId === selectedFilmId) {
+        setWitnessVideos(resolvedVideos);
+        setSelectedWitnessVideoUrl((currentVideoUrl) => {
+          if (preferredMediaUrl && resolvedVideos.some((video) => video.mediaUrl === preferredMediaUrl)) {
+            return preferredMediaUrl;
+          }
 
-        return resolvedVideos[0]?.mediaUrl ?? '';
-      });
+          if (currentVideoUrl && resolvedVideos.some((video) => video.mediaUrl === currentVideoUrl)) {
+            return currentVideoUrl;
+          }
+
+          return resolvedVideos[0]?.mediaUrl ?? '';
+        });
+      }
     } catch {
-      setWitnessVideos([]);
-      setSelectedWitnessVideoUrl('');
+      if (targetFilmId === selectedFilmId) {
+        setWitnessVideos([]);
+        setSelectedWitnessVideoUrl('');
+      }
+      setWitnessesByFilmId((prev) => ({
+        ...prev,
+        [targetFilmId]: [],
+      }));
     }
   }, [selectedFilmId]);
 
@@ -321,6 +350,27 @@ export const App = () => {
       setSequenceExtractionHistory([]);
     }
   }, [selectedFilmId]);
+
+  const loadAllWitnessVideosForTreeView = useCallback(async () => {
+    const newWitnessesByFilmId: Record<string, UploadWitnessVideoResponse[]> = {};
+
+    for (const film of films) {
+      try {
+        const payload = await fetchJson<WitnessVideosResponse>(`/api/filesystem/films/${film.id}/witness-videos`);
+
+        const resolvedVideos = payload.videos.map((video) => ({
+          ...video,
+          mediaUrl: video.mediaUrl.startsWith('http') ? video.mediaUrl : `${apiBaseUrl}${video.mediaUrl}`,
+        }));
+
+        newWitnessesByFilmId[film.id] = resolvedVideos;
+      } catch {
+        newWitnessesByFilmId[film.id] = [];
+      }
+    }
+
+    setWitnessesByFilmId(newWitnessesByFilmId);
+  }, [films]);
 
   const submitWitnessVideoUpload = async () => {
     if (!selectedFilmId) {
@@ -347,7 +397,7 @@ export const App = () => {
       );
 
       const resolvedMediaUrl = payload.mediaUrl.startsWith('http') ? payload.mediaUrl : `${apiBaseUrl}${payload.mediaUrl}`;
-      await loadWitnessVideos(resolvedMediaUrl);
+      await loadWitnessVideos(selectedFilmId, resolvedMediaUrl);
 
       setSuccessMessage(`Witness video "${payload.fileName}" uploaded successfully.`);
       closeUploadWitnessDialog();
@@ -358,13 +408,8 @@ export const App = () => {
     }
   };
 
-  const selectedWitnessVideoEntry = useMemo<UploadWitnessVideoResponse | null>(() => {
-    const matched = witnessVideos.find((video) => video.mediaUrl === selectedWitnessVideoUrl);
-    return matched ?? null;
-  }, [selectedWitnessVideoUrl, witnessVideos]);
-
   const submitWitnessVideoDelete = async () => {
-    if (!selectedFilmId || !selectedWitnessVideoEntry) {
+    if (!selectedFilmId || !currentWitness) {
       setErrorMessage('Select a witness video to delete.');
       return;
     }
@@ -374,10 +419,10 @@ export const App = () => {
 
     try {
       await deleteRequest(
-        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(selectedWitnessVideoEntry.fileName)}`,
+        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(currentWitness.fileName)}`,
       );
-      await loadWitnessVideos();
-      setSuccessMessage(`Witness video "${selectedWitnessVideoEntry.fileName}" deleted successfully.`);
+      await loadWitnessVideos(selectedFilmId);
+      setSuccessMessage(`Witness video "${currentWitness.fileName}" deleted successfully.`);
       setDeleteWitnessDialogOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to delete witness video.');
@@ -387,7 +432,7 @@ export const App = () => {
   };
 
   const submitSequenceExtraction = async () => {
-    if (!selectedFilmId || !selectedWitnessVideoEntry) {
+    if (!selectedFilmId || !currentWitness) {
       setSequenceExtractionErrorMessage('Select a film and a witness video before starting extraction.');
       return;
     }
@@ -416,7 +461,7 @@ export const App = () => {
 
     try {
       const payload = await postJson<SequenceExtractionAcceptedResponse>(
-        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(selectedWitnessVideoEntry.fileName)}/sequence-extraction`,
+        `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(currentWitness.fileName)}/sequence-extraction`,
         {
           targetFps,
           sceneThreshold,
@@ -479,8 +524,8 @@ export const App = () => {
       return;
     }
 
-    void loadReels(selectedFilmId);
-  }, [loadReels, selectedFilmId]);
+    void loadReelsForFilm(selectedFilmId);
+  }, [loadReelsForFilm, selectedFilmId]);
 
   useEffect(() => {
     if (!selectedFilmId || !selectedReelId) {
@@ -510,12 +555,16 @@ export const App = () => {
   }, [selectedFilmId, selectedReelId]);
 
   useEffect(() => {
-    void loadWitnessVideos();
-  }, [loadWitnessVideos]);
+    void loadWitnessVideos(selectedFilmId);
+  }, [loadWitnessVideos, selectedFilmId]);
 
   useEffect(() => {
     void loadSequenceExtractionHistory();
   }, [loadSequenceExtractionHistory]);
+
+  useEffect(() => {
+    void loadAllWitnessVideosForTreeView();
+  }, [loadAllWitnessVideosForTreeView]);
 
   useEffect(() => {
     if (!sequenceExtractionJob) {
@@ -523,7 +572,7 @@ export const App = () => {
     }
 
     if (sequenceExtractionJob.status === 'succeeded') {
-      void loadReels(selectedFilmId, sequenceExtractionJob.outputReelId ?? undefined);
+      void loadReelsForFilm(selectedFilmId, sequenceExtractionJob.outputReelId ?? undefined);
       void loadSequenceExtractionHistory();
       setSuccessMessage(`Sequence extraction "${sequenceExtractionJob.outputReelId ?? sequenceExtractionJob.jobId}" completed successfully.`);
       setSequenceExtractionDialogOpen(false);
@@ -546,7 +595,7 @@ export const App = () => {
     return () => {
       globalThis.clearTimeout(timeoutId);
     };
-  }, [loadReels, loadSequenceExtractionHistory, refreshSequenceExtractionJob, selectedFilmId, sequenceExtractionJob]);
+  }, [loadReelsForFilm, loadSequenceExtractionHistory, refreshSequenceExtractionJob, selectedFilmId, sequenceExtractionJob]);
 
   useEffect(() => {
     setSequenceExtractionDialogOpen(false);
@@ -558,6 +607,80 @@ export const App = () => {
   const durationInFrames = useMemo<number>(() => {
     return frameUrls.length > 0 ? frameUrls.length : 1;
   }, [frameUrls.length]);
+
+  const currentFilm = useMemo(() => films.find((f) => f.id === selectedFilmId) || null, [films, selectedFilmId]);
+  const currentReel = useMemo(() => reels.find((r) => r.id === selectedReelId) || null, [reels, selectedReelId]);
+  const currentWitness = useMemo(
+    () => witnessVideos.find((w) => w.mediaUrl === selectedWitnessVideoUrl) || null,
+    [witnessVideos, selectedWitnessVideoUrl],
+  );
+
+  const parseNavigationNode = (nodeId: string) => {
+    if (nodeId === 'home') {
+      return { type: 'home' as const };
+    }
+
+    if (nodeId.startsWith('film-')) {
+      const filmId = nodeId.replace('film-', '');
+      return { type: 'film' as const, filmId };
+    }
+
+    if (nodeId.startsWith('witnesses-')) {
+      const filmId = nodeId.replace('witnesses-', '');
+      return { type: 'witnesses' as const, filmId };
+    }
+
+    if (nodeId.startsWith('witness-')) {
+      const parts = nodeId.replace('witness-', '').split('-');
+      const filmId = parts[0];
+      const fileName = parts.slice(1).join('-');
+      return { type: 'witness' as const, filmId, fileName };
+    }
+
+    if (nodeId.startsWith('reels-')) {
+      const filmId = nodeId.replace('reels-', '');
+      return { type: 'reels' as const, filmId };
+    }
+
+    if (nodeId.startsWith('reel-')) {
+      const parts = nodeId.replace('reel-', '').split('-');
+      const filmId = parts[0];
+      const reelId = parts.slice(1).join('-');
+      return { type: 'reel' as const, filmId, reelId };
+    }
+
+    return { type: 'home' as const };
+  };
+
+  const navigationContext = parseNavigationNode(selectedNavigationNode);
+
+  const handleNavigationNodeSelect = (nodeId: string) => {
+    setSelectedNavigationNode(nodeId);
+
+    const context = parseNavigationNode(nodeId);
+
+    if (context.type === 'film') {
+      setSelectedFilmId(context.filmId);
+    } else if (context.type === 'witnesses') {
+      setSelectedFilmId(context.filmId);
+    } else if (context.type === 'witness') {
+      setSelectedFilmId(context.filmId);
+      const film = films.find((f) => f.id === context.filmId);
+      if (film) {
+        const filmWitnesses = witnessesByFilmId[context.filmId] || [];
+        const witness = filmWitnesses.find((w) => w.fileName === context.fileName);
+        if (witness) {
+          setSelectedWitnessVideoUrl(witness.mediaUrl);
+          setSelectedWitnessFileName(witness.fileName);
+        }
+      }
+    } else if (context.type === 'reels') {
+      setSelectedFilmId(context.filmId);
+    } else if (context.type === 'reel') {
+      setSelectedFilmId(context.filmId);
+      setSelectedReelId(context.reelId);
+    }
+  };
 
   return (
     <Box
@@ -575,42 +698,117 @@ export const App = () => {
         component="main"
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
+          gridTemplateColumns: { xs: '1fr', md: '280px 1fr' },
           gap: 1,
           padding: 1,
           flex: 1,
           boxSizing: 'border-box',
         }}
       >
-        <FilmSidebar
+        <AppNavigationTree
           films={films}
-          reels={reels}
-          isLoading={isLoading}
-          selectedFilmId={selectedFilmId}
-          selectedReelId={selectedReelId}
-          frameCount={frameUrls.length}
-          errorMessage={errorMessage}
-          onAddFilm={() => setCreateFilmDialogOpen(true)}
-          onUploadWitnessVideo={() => setUploadWitnessDialogOpen(true)}
-          onFilmChange={setSelectedFilmId}
-          onReelChange={setSelectedReelId}
+          reels={reelsByFilmId}
+          witnessVideos={witnessesByFilmId}
+          selectedNode={selectedNavigationNode}
+          onNodeSelect={handleNavigationNodeSelect}
         />
-        <FilmPreviewSection
-          frameUrls={frameUrls}
-          durationInFrames={durationInFrames}
-          selectedWitnessVideoUrl={selectedWitnessVideoUrl}
-          witnessVideos={witnessVideos}
-          selectedWitnessVideoEntry={selectedWitnessVideoEntry}
-          extractionHistory={sequenceExtractionHistory}
-          isDeletingWitnessVideo={isDeletingWitnessVideo}
-          isExtractingSequence={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
-          onDeleteSelectedWitnessVideo={() => setDeleteWitnessDialogOpen(true)}
-          onOpenSequenceExtraction={() => {
-            setSequenceExtractionDialogOpen(true);
-            setSequenceExtractionErrorMessage('');
+
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            overflow: 'auto',
           }}
-          onWitnessVideoChange={setSelectedWitnessVideoUrl}
-        />
+        >
+          {navigationContext.type === 'home' && (
+            <DashboardPage
+              films={films}
+              isLoading={isLoading}
+              onAddFilm={() => setCreateFilmDialogOpen(true)}
+              onSelectFilm={(filmId) => {
+                setSelectedFilmId(filmId);
+                setSelectedNavigationNode(`film-${filmId}`);
+              }}
+            />
+          )}
+
+          {navigationContext.type === 'film' && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                height: '100%',
+              }}
+            >
+              <Paper
+                sx={{
+                  padding: 2,
+                  borderRadius: 1.5,
+                  boxShadow: '0 8px 24px rgba(17, 25, 40, 0.08)',
+                }}
+              >
+                <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                  {currentFilm?.displayName}
+                </Typography>
+              </Paper>
+            </Box>
+          )}
+
+          {navigationContext.type === 'witnesses' && (
+            <WitnessesPage
+              film={currentFilm}
+              witnessVideos={witnessesByFilmId[navigationContext.filmId] || []}
+              isLoading={isLoading}
+              onUploadWitness={() => setUploadWitnessDialogOpen(true)}
+              onSelectWitness={(fileName) => {
+                setSelectedWitnessFileName(fileName);
+                const filmWitnesses = witnessesByFilmId[navigationContext.filmId] || [];
+                const witness = filmWitnesses.find((w) => w.fileName === fileName);
+                if (witness) {
+                  setSelectedWitnessVideoUrl(witness.mediaUrl);
+                  setSelectedNavigationNode(`witness-${navigationContext.filmId}-${fileName}`);
+                }
+              }}
+            />
+          )}
+
+          {navigationContext.type === 'witness' && (
+            <WitnessDetailPage
+              film={currentFilm}
+              witness={currentWitness}
+              isDeleting={isDeletingWitnessVideo}
+              isExtracting={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
+              onDelete={() => setDeleteWitnessDialogOpen(true)}
+              onExtractSequence={() => {
+                setSequenceExtractionDialogOpen(true);
+                setSequenceExtractionErrorMessage('');
+              }}
+            />
+          )}
+
+          {navigationContext.type === 'reels' && (
+            <ReelsPage
+              film={currentFilm}
+              reels={reelsByFilmId[navigationContext.filmId] || []}
+              isLoading={isLoading}
+              onSelectReel={(reelId) => {
+                setSelectedReelId(reelId);
+                setSelectedNavigationNode(`reel-${navigationContext.filmId}-${reelId}`);
+              }}
+            />
+          )}
+
+          {navigationContext.type === 'reel' && (
+            <ReelDetailPage
+              film={currentFilm}
+              reel={currentReel}
+              frameUrls={frameUrls}
+              isLoading={isLoading}
+            />
+          )}
+        </Box>
       </Box>
 
       <CreateFilmDialog
@@ -625,7 +823,7 @@ export const App = () => {
       <DeleteWitnessDialog
         open={isDeleteWitnessDialogOpen}
         isDeleting={isDeletingWitnessVideo}
-        selectedFileName={selectedWitnessVideoEntry?.fileName ?? ''}
+        selectedFileName={currentWitness?.fileName ?? ''}
         onClose={() => {
           if (!isDeletingWitnessVideo) {
             setDeleteWitnessDialogOpen(false);
@@ -652,7 +850,7 @@ export const App = () => {
       <SequenceExtractionDialog
         open={isSequenceExtractionDialogOpen}
         selectedFilmId={selectedFilmId}
-        selectedWitnessVideoName={selectedWitnessVideoEntry?.fileName ?? ''}
+        selectedWitnessVideoName={currentWitness?.fileName ?? ''}
         isSubmitting={isStartingSequenceExtraction}
         values={sequenceExtractionValues}
         jobStatus={sequenceExtractionJob}
