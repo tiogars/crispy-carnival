@@ -118,6 +118,7 @@ export const FilmPreviewSection = ({
 
       {playerMode === 'animated' ? (
         <Player
+          acknowledgeRemotionLicense
           component={FilmSequenceComposition}
           inputProps={{ frameUrls }}
           durationInFrames={durationInFrames}
@@ -127,7 +128,7 @@ export const FilmPreviewSection = ({
           controls
           autoPlay={false}
           loop
-          style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
+          style={{ aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
         />
       ) : (
         <ImageStepPlayer frameUrls={frameUrls} />

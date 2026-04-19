@@ -3,6 +3,33 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks: (id) => {
+          const normalizedId = id.replace(/\\/g, '/');
+
+          if (!normalizedId.includes('node_modules')) {
+            return undefined;
+          }
+
+          if (normalizedId.includes('@mui/')) {
+            return 'vendor-mui';
+          }
+
+          if (normalizedId.includes('react-dom') || normalizedId.includes('/react/')) {
+            return 'vendor-react';
+          }
+
+          if (normalizedId.includes('react-hook-form')) {
+            return 'vendor-forms';
+          }
+
+          return 'vendor-misc';
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

@@ -31,7 +31,7 @@ export function Header({
       <Toolbar sx={{ gap: 2, backdropFilter: 'blur(12px)' }}>
         <AutoAwesomeMotionOutlinedIcon color="primary" />
         <Typography variant="h6" noWrap sx={{ flexGrow: 1, letterSpacing: '0.02em' }}>
-          Template Repository Dashboard
+          Film Sequence Finder
         </Typography>
         {showSeededFavorite !== undefined && onToggleSeededFavorite && (
           <Tooltip title="Seeded favorite">

@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Alert from '@mui/material/Alert';
 import { Box } from '@mui/material';
+import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Header } from '../components/Header';
 import {
-  CreateFilmResponse,
   CreateFilmRequest,
+  CreateFilmResponse,
   Film,
   NewFilmFormValues,
   Reel,
@@ -23,7 +23,6 @@ import {
 import { AppFooter } from './components/AppFooter';
 import { FilmPreviewSection } from './components/FilmPreviewSection';
 import { FilmSidebar } from './components/FilmSidebar';
-import { HeroSection } from './components/HeroSection';
 import { CreateFilmDialog } from './components/dialogs/CreateFilmDialog';
 import { DeleteWitnessDialog } from './components/dialogs/DeleteWitnessDialog';
 import { SequenceExtractionDialog } from './components/dialogs/SequenceExtractionDialog';
@@ -571,7 +570,6 @@ export const App = () => {
       }}
     >
       <Header swaggerUrl={swaggerApiUrl} documentationHref={documentationUrl} />
-      <HeroSection />
 
       <Box
         component="main"
