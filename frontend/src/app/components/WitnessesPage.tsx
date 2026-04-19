@@ -97,7 +97,7 @@ export const WitnessesPage = ({
       ) : (
         <Grid container spacing={2}>
           {witnessVideos.map((video) => (
-            <Grid item xs={12} sm={6} md={4} key={video.fileName}>
+            <Grid key={video.fileName} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 sx={{
                   borderRadius: 1.5,

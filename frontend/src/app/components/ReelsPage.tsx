@@ -88,7 +88,7 @@ export const ReelsPage = ({
       ) : (
         <Grid container spacing={2}>
           {reels.map((reel) => (
-            <Grid item xs={12} sm={6} md={4} key={reel.id}>
+            <Grid key={reel.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 sx={{
                   borderRadius: 1.5,

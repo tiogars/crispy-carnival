@@ -73,7 +73,7 @@ export const DashboardPage = ({
       ) : (
         <Grid container spacing={2}>
           {films.map((film) => (
-            <Grid item xs={12} sm={6} md={4} key={film.id}>
+            <Grid key={film.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 sx={{
                   borderRadius: 1.5,
