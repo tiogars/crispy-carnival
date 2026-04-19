@@ -23,6 +23,68 @@ afterEach(() => {
 });
 
 describe('App create film modal', () => {
+  it('creates Test1 dataset with the Add Test action', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        const callsToFilms = fetchMock.mock.calls.filter(
+          ([url, requestInit]) => String(url) === '/api/filesystem/films' && (requestInit?.method ?? 'GET') === 'GET',
+        ).length;
+
+        if (callsToFilms > 1) {
+          return Promise.resolve(
+            jsonResponse({
+              films: [{ id: 'Test1', displayName: 'Test1' }],
+            }),
+          );
+        }
+
+        return Promise.resolve(jsonResponse({ films: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'POST' && path === '/api/filesystem/films/add-test') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              film: { id: 'Test1', displayName: 'Test1' },
+            },
+            201,
+          ),
+        );
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add Test' }));
+
+    await screen.findByText('Film "Test1" created successfully.');
+
+    const postCall = fetchMock.mock.calls.find(
+      ([url, requestInit]) => String(url) === '/api/filesystem/films/add-test' && requestInit?.method === 'POST',
+    );
+
+    expect(postCall).toBeDefined();
+    expect(postCall?.[1]?.body).toBe('{}');
+  }, 20000);
+
   it('creates a film, sends optional reel name, and shows a success snackbar', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const path = String(input);

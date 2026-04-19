@@ -27,6 +27,68 @@ def test_create_film_returns_exact_500_payload_on_unexpected_error(monkeypatch, 
     assert response.json() == {'detail': 'error during film creation'}
 
 
+def test_add_test_film_creates_expected_reels_and_witness_frames(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+
+    response = client.post('/api/filesystem/films/add-test', json={})
+
+    assert response.status_code == 201
+    assert response.json() == {
+        'film': {
+            'id': 'Test1',
+            'displayName': 'Test1',
+        }
+    }
+
+    film_path = tmp_path / 'Test1'
+    assert film_path.exists()
+
+    for reel_id in ('B1', 'B2', 'B3'):
+        reel_frames_path = film_path / '_reels' / reel_id / 'frames'
+        expected_frame_names = [f'frame{100000 + index}.jpg' for index in range(4)]
+
+        assert reel_frames_path.exists()
+        assert sorted(frame.name for frame in reel_frames_path.iterdir()) == expected_frame_names
+
+    b1_frames_path = film_path / '_reels' / 'B1' / 'frames'
+    assert (b1_frames_path / 'frame100000.jpg').read_bytes() != (b1_frames_path / 'frame100001.jpg').read_bytes()
+
+    witness_frames_path = film_path / '_witness_videos' / 'witness1' / 'frames'
+    expected_witness_frames = [f'frame{1000000 + index}.jpg' for index in range(10)]
+    assert witness_frames_path.exists()
+    assert sorted(frame.name for frame in witness_frames_path.iterdir()) == expected_witness_frames
+
+    expected_mapping = [
+        ('B3', 'frame100001.jpg'),
+        ('B3', 'frame100002.jpg'),
+        ('B2', 'frame100000.jpg'),
+        ('B2', 'frame100001.jpg'),
+        ('B1', 'frame100002.jpg'),
+        ('B1', 'frame100003.jpg'),
+        ('B2', 'frame100002.jpg'),
+        ('B2', 'frame100003.jpg'),
+        ('B1', 'frame100000.jpg'),
+        ('B1', 'frame100001.jpg'),
+    ]
+
+    for witness_index, (reel_id, source_frame_name) in enumerate(expected_mapping):
+        witness_frame_name = f'frame{1000000 + witness_index}.jpg'
+        witness_frame_path = witness_frames_path / witness_frame_name
+        source_frame_path = film_path / '_reels' / reel_id / 'frames' / source_frame_name
+
+        assert witness_frame_path.read_bytes() == source_frame_path.read_bytes()
+
+
+def test_add_test_film_returns_409_when_test_film_already_exists(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    (tmp_path / 'Test1').mkdir(parents=True, exist_ok=True)
+
+    response = client.post('/api/filesystem/films/add-test', json={})
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'A film with this name already exists.'}
+
+
 def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_get_media_frame_count', lambda _video_path: 240)

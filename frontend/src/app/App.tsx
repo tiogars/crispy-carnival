@@ -26,7 +26,6 @@ import { AppFooter } from './components/AppFooter';
 import { AppNavigationTree } from './components/AppNavigationTree';
 import { DashboardPage } from './components/DashboardPage';
 import { FilmPreviewSection } from './components/FilmPreviewSection';
-import { FilmSidebar } from './components/FilmSidebar';
 import { ReelDetailPage } from './components/ReelDetailPage';
 import { ReelsPage } from './components/ReelsPage';
 import { WitnessDetailPage } from './components/WitnessDetailPage';
@@ -321,6 +320,20 @@ export const App = () => {
       setErrorMessage(message.includes('500') ? 'error during film creation' : message);
     }
   });
+
+  const submitAddTestFilm = async () => {
+    setErrorMessage('');
+
+    try {
+      const payload = await postJson<CreateFilmResponse>('/api/filesystem/films/add-test', {});
+      await loadFilms(payload.film.id);
+      setSuccessMessage(`Film "${payload.film.displayName}" created successfully.`);
+      setSelectedNavigationNode(`film-${payload.film.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create film.';
+      setErrorMessage(message.includes('500') ? 'error during film creation' : message);
+    }
+  };
 
   const closeUploadWitnessDialog = () => {
     setUploadWitnessDialogOpen(false);
@@ -978,6 +991,9 @@ export const App = () => {
               films={films}
               isLoading={isLoading}
               onAddFilm={() => setCreateFilmDialogOpen(true)}
+              onAddTestFilm={() => {
+                void submitAddTestFilm();
+              }}
               onSelectFilm={(filmId) => {
                 setSelectedFilmId(filmId);
                 setSelectedNavigationNode(`film-${filmId}`);

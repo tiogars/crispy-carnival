@@ -1,5 +1,6 @@
 import { Box, Button, Card, CardActionArea, CardContent, Grid, Paper, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import ScienceIcon from '@mui/icons-material/Science';
 
 import type { Film } from '../App.types';
 
@@ -7,6 +8,7 @@ type DashboardPageProps = {
   films: Film[];
   isLoading: boolean;
   onAddFilm: () => void;
+  onAddTestFilm: () => void;
   onSelectFilm: (filmId: string) => void;
 };
 
@@ -14,6 +16,7 @@ export const DashboardPage = ({
   films,
   isLoading,
   onAddFilm,
+  onAddTestFilm,
   onSelectFilm,
 }: Readonly<DashboardPageProps>) => {
   return (
@@ -39,14 +42,25 @@ export const DashboardPage = ({
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Films
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={onAddFilm}
-          disabled={isLoading}
-        >
-          Add Film
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<ScienceIcon />}
+            onClick={onAddTestFilm}
+            disabled={isLoading}
+          >
+            Add Test
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={onAddFilm}
+            disabled={isLoading}
+          >
+            Add Film
+          </Button>
+        </Box>
       </Paper>
 
       {films.length === 0 ? (

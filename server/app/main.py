@@ -3,6 +3,7 @@ import re
 import shutil
 import subprocess
 import threading
+from io import BytesIO
 from datetime import UTC, datetime
 from json import JSONDecodeError, loads as json_loads
 from json import dumps as json_dumps
@@ -14,6 +15,7 @@ from uuid import uuid4
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 
@@ -31,6 +33,24 @@ JOB_STATUS_QUEUED = 'queued'
 JOB_STATUS_RUNNING = 'running'
 JOB_STATUS_SUCCEEDED = 'succeeded'
 JOB_STATUS_FAILED = 'failed'
+TEST_FILM_ID = 'Test1'
+TEST_WITNESS_ID = 'witness1'
+TEST_REEL_IDS = ('B1', 'B2', 'B3')
+TEST_REEL_FRAME_START = 100000
+TEST_WITNESS_FRAME_START = 1000000
+TEST_WITNESS_SEQUENCE = (
+    ('B3', 2),
+    ('B3', 3),
+    ('B2', 1),
+    ('B2', 2),
+    ('B1', 3),
+    ('B1', 4),
+    ('B2', 3),
+    ('B2', 4),
+    ('B1', 1),
+    ('B1', 2),
+)
+
 
 
 def _build_media_entry_dir_name(file_name: str, fallback_name: str) -> str:
@@ -320,6 +340,67 @@ def _get_film_path_or_404(film_id: str) -> Path:
         raise HTTPException(status_code=404, detail='Film not found.')
 
     return film_path
+
+
+def _build_test_frame_name(frame_number: int) -> str:
+    return f'frame{frame_number}.jpg'
+
+
+def _get_test_reel_background_color(reel_id: str) -> tuple[int, int, int]:
+    if reel_id == 'B1':
+        return (32, 76, 148)
+
+    if reel_id == 'B2':
+        return (34, 115, 78)
+
+    return (128, 72, 28)
+
+
+def _build_test_frame_bytes(reel_id: str, frame_position: int, frame_name: str) -> bytes:
+    label = f'{reel_id} F{frame_position} ({frame_name[:-4]})'
+    image = Image.new('RGB', (960, 540), _get_test_reel_background_color(reel_id))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+
+    # Add a readable translucent block behind the text for visual clarity.
+    draw.rectangle((48, 220, 912, 320), fill=(10, 10, 10))
+    draw.text((64, 255), label, fill=(255, 255, 255), font=font)
+
+    output = BytesIO()
+    image.save(output, format='JPEG', quality=90)
+    return output.getvalue()
+
+
+def _create_test_film_structure(film_path: Path) -> None:
+    reels_root = _get_reels_root_path(film_path)
+    witness_root = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+    witness_entry_path = _safe_join(witness_root, TEST_WITNESS_ID)
+    witness_frames_path = _safe_join(witness_entry_path, FRAMES_DIRNAME)
+
+    reels_root.mkdir(parents=False, exist_ok=True)
+    witness_root.mkdir(parents=False, exist_ok=True)
+    witness_entry_path.mkdir(parents=False, exist_ok=True)
+    witness_frames_path.mkdir(parents=False, exist_ok=True)
+
+    for reel_id in TEST_REEL_IDS:
+        reel_path = _get_reel_path(film_path, reel_id)
+        reel_frames_path = _get_reel_frames_path(reel_path)
+
+        reel_path.mkdir(parents=False, exist_ok=True)
+        reel_frames_path.mkdir(parents=False, exist_ok=True)
+
+        for frame_index in range(4):
+            reel_frame_name = _build_test_frame_name(TEST_REEL_FRAME_START + frame_index)
+            reel_frame_position = frame_index + 1
+            reel_frame_bytes = _build_test_frame_bytes(reel_id, reel_frame_position, reel_frame_name)
+            _safe_join(reel_frames_path, reel_frame_name).write_bytes(reel_frame_bytes)
+
+    for witness_index, (reel_id, reel_frame_position) in enumerate(TEST_WITNESS_SEQUENCE):
+        source_frame_name = _build_test_frame_name(TEST_REEL_FRAME_START + (reel_frame_position - 1))
+        source_frame_path = _safe_join(_get_reel_frames_path(_get_reel_path(film_path, reel_id)), source_frame_name)
+        witness_frame_name = _build_test_frame_name(TEST_WITNESS_FRAME_START + witness_index)
+        target_frame_path = _safe_join(witness_frames_path, witness_frame_name)
+        shutil.copy2(source_frame_path, target_frame_path)
 
 
 def _get_witness_video_path_or_404(film_id: str, file_name: str) -> tuple[Path, Path]:
@@ -998,6 +1079,35 @@ def create_film(payload: CreateFilmRequest) -> CreateFilmResponse:
 
         return CreateFilmResponse(
             film=FilmItem(id=film_id, displayName=_format_film_display_name(film_id))
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail='error during film creation') from error
+
+
+@app.post(
+    '/api/filesystem/films/add-test',
+    status_code=201,
+    responses={
+        409: {'description': 'Film already exists.'},
+        500: {'description': 'error during film creation'},
+    },
+)
+def create_test_film() -> CreateFilmResponse:
+    try:
+        FILM_LIBRARY_ROOT.mkdir(parents=True, exist_ok=True)
+
+        film_path = _safe_join(FILM_LIBRARY_ROOT, TEST_FILM_ID)
+
+        if film_path.exists():
+            raise HTTPException(status_code=409, detail='A film with this name already exists.')
+
+        film_path.mkdir(parents=False, exist_ok=False)
+        _create_test_film_structure(film_path)
+
+        return CreateFilmResponse(
+            film=FilmItem(id=TEST_FILM_ID, displayName=_format_film_display_name(TEST_FILM_ID))
         )
     except HTTPException:
         raise
