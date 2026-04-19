@@ -1,4 +1,4 @@
-# 0.1 README Guide
+# README Guide
 
 This section describes the purpose and expected content of each section
 in the project `README.md` file. Use it as a checklist when creating or
