@@ -1,7 +1,9 @@
-import { Box, Button, FormControl, InputLabel, Link, MenuItem, Paper, Select, Typography } from '@mui/material';
+import { Box, Button, FormControl, InputLabel, Link, MenuItem, Paper, Select, Typography, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { Player } from '@remotion/player';
+import { useState } from 'react';
 
 import { FilmSequenceComposition } from '../../features/film-viewer/FilmSequenceComposition';
+import { ImageStepPlayer } from '../../features/film-viewer/ImageStepPlayer';
 import type { SequenceExtractionJobStatusResponse, UploadWitnessVideoResponse } from '../App.types';
 
 const formatDuration = (seconds: number | null) => {
@@ -69,6 +71,14 @@ export const FilmPreviewSection = ({
   onOpenSequenceExtraction,
   onWitnessVideoChange,
 }: Readonly<FilmPreviewSectionProps>) => {
+  const [playerMode, setPlayerMode] = useState<'animated' | 'step'>('animated');
+
+  const handlePlayerModeChange = (event: React.MouseEvent<HTMLElement>, newMode: 'animated' | 'step' | null) => {
+    if (newMode !== null) {
+      setPlayerMode(newMode);
+    }
+  };
+
   return (
     <Paper
       component="section"
@@ -79,18 +89,49 @@ export const FilmPreviewSection = ({
         boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.04)',
       }}
     >
-      <Player
-        component={FilmSequenceComposition}
-        inputProps={{ frameUrls }}
-        durationInFrames={durationInFrames}
-        compositionWidth={1280}
-        compositionHeight={720}
-        fps={24}
-        controls
-        autoPlay={false}
-        loop
-        style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
-      />
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 1 }}>
+        <ToggleButtonGroup
+          value={playerMode}
+          exclusive
+          onChange={handlePlayerModeChange}
+          size="small"
+          sx={{
+            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            '& .MuiToggleButton-root': {
+              color: '#90caf9',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              '&.Mui-selected': {
+                backgroundColor: 'rgba(144, 202, 249, 0.2)',
+                color: '#fff',
+              },
+            },
+          }}
+        >
+          <ToggleButton value="animated" aria-label="animated player">
+            Animated
+          </ToggleButton>
+          <ToggleButton value="step" aria-label="step player">
+            Step
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      {playerMode === 'animated' ? (
+        <Player
+          component={FilmSequenceComposition}
+          inputProps={{ frameUrls }}
+          durationInFrames={durationInFrames}
+          compositionWidth={1280}
+          compositionHeight={720}
+          fps={24}
+          controls
+          autoPlay={false}
+          loop
+          style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
+        />
+      ) : (
+        <ImageStepPlayer frameUrls={frameUrls} />
+      )}
       <Box
         sx={{
           marginTop: 0.85,
