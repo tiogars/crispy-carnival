@@ -59,7 +59,6 @@ const TreeItemButton = ({ nodeId, label, icon, isSelected, onSelect, children, h
           fontWeight: isSelected ? 600 : 500,
         }}
       >
-        {!hasChildren && icon}
         {label}
       </Button>
       {hasChildren && (
