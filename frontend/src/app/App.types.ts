@@ -3,6 +3,9 @@ export type NavigationNode =
   | `film-${string}`
   | `witnesses-${string}`
   | `witness-${string}`
+  | `witness-file-${string}`
+  | `witness-sequences-${string}`
+  | `witness-frames-${string}`
   | `reels-${string}`
   | `reel-${string}`
   | `reel-file-${string}`

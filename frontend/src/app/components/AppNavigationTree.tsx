@@ -114,7 +114,16 @@ export const AppNavigationTree = ({
             label={film.displayName}
             icon={<MovieIcon />}
             isSelected={selectedNode === `film-${film.id}`}
-            isBranchSelected={selectedNode === `film-${film.id}` || selectedNode.startsWith(`witnesses-${film.id}`) || selectedNode.startsWith(`witness-${film.id}-`) || selectedNode.startsWith(`reels-${film.id}`) || selectedNode.startsWith(`reel-${film.id}-`)}
+            isBranchSelected={
+              selectedNode === `film-${film.id}` ||
+              selectedNode.startsWith(`witnesses-${film.id}`) ||
+              selectedNode.startsWith(`witness-${film.id}-`) ||
+              selectedNode.startsWith(`witness-file-${film.id}::`) ||
+              selectedNode.startsWith(`witness-sequences-${film.id}::`) ||
+              selectedNode.startsWith(`witness-frames-${film.id}::`) ||
+              selectedNode.startsWith(`reels-${film.id}`) ||
+              selectedNode.startsWith(`reel-${film.id}-`)
+            }
             onSelect={onNodeSelect}
             hasChildren
           >
@@ -123,20 +132,64 @@ export const AppNavigationTree = ({
               label="Witnesses"
               icon={<VideoLibraryIcon />}
               isSelected={selectedNode === `witnesses-${film.id}`}
-              isBranchSelected={selectedNode === `witnesses-${film.id}` || selectedNode.startsWith(`witness-${film.id}-`)}
+              isBranchSelected={
+                selectedNode === `witnesses-${film.id}` ||
+                selectedNode.startsWith(`witness-${film.id}-`) ||
+                selectedNode.startsWith(`witness-file-${film.id}::`) ||
+                selectedNode.startsWith(`witness-sequences-${film.id}::`) ||
+                selectedNode.startsWith(`witness-frames-${film.id}::`)
+              }
               onSelect={onNodeSelect}
               hasChildren={Boolean((witnessVideos[film.id]?.length ?? 0) > 0)}
             >
-              {(witnessVideos[film.id] ?? []).map((video) => (
-                <TreeItemButton
-                  key={video.fileName}
-                  nodeId={`witness-${film.id}-${video.fileName}`}
-                  label={video.fileName}
-                  icon={<PlayCircleIcon sx={{ fontSize: '1rem' }} />}
-                  isSelected={selectedNode === `witness-${film.id}-${video.fileName}`}
-                  onSelect={onNodeSelect}
-                />
-              ))}
+              {(witnessVideos[film.id] ?? []).map((video) => {
+                const witnessNodeId = `witness-${film.id}-${video.fileName}` as NavigationNode;
+                const witnessFileNodeId = `witness-file-${film.id}::${video.fileName}` as NavigationNode;
+                const witnessSequencesNodeId = `witness-sequences-${film.id}::${video.fileName}` as NavigationNode;
+                const witnessFramesNodeId = `witness-frames-${film.id}::${video.fileName}` as NavigationNode;
+
+                return (
+                  <TreeItemButton
+                    key={video.fileName}
+                    nodeId={witnessNodeId}
+                    label={video.fileName}
+                    icon={<PlayCircleIcon sx={{ fontSize: '1rem' }} />}
+                    isSelected={selectedNode === witnessNodeId}
+                    isBranchSelected={
+                      selectedNode === witnessNodeId ||
+                      selectedNode === witnessFileNodeId ||
+                      selectedNode === witnessSequencesNodeId ||
+                      selectedNode === witnessFramesNodeId
+                    }
+                    onSelect={onNodeSelect}
+                    hasChildren
+                  >
+                    <TreeItemButton
+                      nodeId={witnessFileNodeId}
+                      label="File"
+                      icon={<DescriptionIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === witnessFileNodeId}
+                      onSelect={onNodeSelect}
+                    />
+
+                    <TreeItemButton
+                      nodeId={witnessSequencesNodeId}
+                      label="Sequences"
+                      icon={<VideoLibraryIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === witnessSequencesNodeId}
+                      onSelect={onNodeSelect}
+                    />
+
+                    <TreeItemButton
+                      nodeId={witnessFramesNodeId}
+                      label="Frames"
+                      icon={<PhotoLibraryIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === witnessFramesNodeId}
+                      onSelect={onNodeSelect}
+                    />
+                  </TreeItemButton>
+                );
+              })}
             </TreeItemButton>
 
             <TreeItemButton

@@ -871,6 +871,15 @@ export const App = () => {
     };
   };
 
+  const parseScopedWitnessNode = (value: string) => {
+    const [filmId, ...fileNameParts] = value.split('::');
+
+    return {
+      filmId,
+      fileName: fileNameParts.join('::'),
+    };
+  };
+
   const parseNavigationNode = (nodeId: string) => {
     if (nodeId === 'home') {
       return { type: 'home' as const };
@@ -884,6 +893,21 @@ export const App = () => {
     if (nodeId.startsWith('witnesses-')) {
       const filmId = nodeId.replace('witnesses-', '');
       return { type: 'witnesses' as const, filmId };
+    }
+
+    if (nodeId.startsWith('witness-file-')) {
+      const { filmId, fileName } = parseScopedWitnessNode(nodeId.replace('witness-file-', ''));
+      return { type: 'witnessFile' as const, filmId, fileName };
+    }
+
+    if (nodeId.startsWith('witness-sequences-')) {
+      const { filmId, fileName } = parseScopedWitnessNode(nodeId.replace('witness-sequences-', ''));
+      return { type: 'witnessSequences' as const, filmId, fileName };
+    }
+
+    if (nodeId.startsWith('witness-frames-')) {
+      const { filmId, fileName } = parseScopedWitnessNode(nodeId.replace('witness-frames-', ''));
+      return { type: 'witnessFrames' as const, filmId, fileName };
     }
 
     if (nodeId.startsWith('witness-')) {
@@ -939,7 +963,12 @@ export const App = () => {
       setSelectedFilmId(context.filmId);
     } else if (context.type === 'witnesses') {
       setSelectedFilmId(context.filmId);
-    } else if (context.type === 'witness') {
+    } else if (
+      context.type === 'witness' ||
+      context.type === 'witnessFile' ||
+      context.type === 'witnessSequences' ||
+      context.type === 'witnessFrames'
+    ) {
       setSelectedFilmId(context.filmId);
       const film = films.find((f) => f.id === context.filmId);
       if (film) {
@@ -1098,7 +1127,10 @@ export const App = () => {
             />
           )}
 
-          {navigationContext.type === 'witness' && (
+          {(navigationContext.type === 'witness' ||
+            navigationContext.type === 'witnessFile' ||
+            navigationContext.type === 'witnessSequences' ||
+            navigationContext.type === 'witnessFrames') && (
             <WitnessDetailPage
               film={currentFilm}
               witness={currentWitness}
