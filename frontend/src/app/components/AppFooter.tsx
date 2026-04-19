@@ -11,6 +11,7 @@ export const AppFooter = () => {
         padding: '0 1rem 1rem',
         color: '#546e7a',
         fontSize: '0.95rem',
+        flexShrink: 0,
         flexDirection: { xs: 'column', md: 'row' },
       }}
     >

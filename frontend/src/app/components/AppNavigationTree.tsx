@@ -90,6 +90,7 @@ export const AppNavigationTree = ({
         padding: 1.5,
         boxShadow: '0 8px 24px rgba(17, 25, 40, 0.08)',
         height: '100%',
+        minHeight: 0,
         overflow: 'auto',
       }}
     >

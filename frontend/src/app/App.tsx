@@ -832,6 +832,8 @@ export const App = () => {
           gap: 1,
           padding: 1,
           flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
           boxSizing: 'border-box',
         }}
       >
@@ -848,6 +850,7 @@ export const App = () => {
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
+            minHeight: 0,
             overflow: 'auto',
           }}
         >
