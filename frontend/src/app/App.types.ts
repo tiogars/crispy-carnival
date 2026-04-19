@@ -28,6 +28,11 @@ export type ReelFramesResponse = {
   frames: string[];
 };
 
+export type WitnessFramesResponse = {
+  fileName: string;
+  frames: string[];
+};
+
 export type CreateFilmRequest = {
   displayName: string;
   firstReelName?: string;

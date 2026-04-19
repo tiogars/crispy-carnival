@@ -155,6 +155,11 @@ class FramesResponse(BaseModel):
     frames: list[str]
 
 
+class WitnessFramesResponse(BaseModel):
+    fileName: str
+    frames: list[str]
+
+
 class CreateFilmRequest(BaseModel):
     displayName: str
     firstReelName: str | None = None
@@ -404,21 +409,49 @@ def _create_test_film_structure(film_path: Path) -> None:
 
 
 def _get_witness_video_path_or_404(film_id: str, file_name: str) -> tuple[Path, Path]:
-    film_path = _get_film_path_or_404(film_id)
-    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+    film_path, _, _, video_path = _get_witness_entry_or_404(film_id, file_name)
 
-    entry_path = _get_witness_video_entry_path(witness_videos_path, file_name)
-    video_path = _safe_join(entry_path, Path(file_name).name)
-
-    if not video_path.exists() or not video_path.is_file():
-        legacy_video_path = _find_legacy_witness_video_path(witness_videos_path, file_name)
-
-        if legacy_video_path.exists() and legacy_video_path.is_file():
-            return film_path, legacy_video_path
-
+    if video_path is None:
         raise HTTPException(status_code=404, detail='Witness video not found.')
 
     return film_path, video_path
+
+
+def _get_witness_entry_or_404(film_id: str, file_name: str) -> tuple[Path, Path, Path | None, Path | None]:
+    film_path = _get_film_path_or_404(film_id)
+    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+
+    if not witness_videos_path.exists() or not witness_videos_path.is_dir():
+        raise HTTPException(status_code=404, detail='Witness video not found.')
+
+    normalized_name = Path(file_name).name
+
+    direct_entry_path = _safe_join(witness_videos_path, normalized_name)
+
+    if direct_entry_path.exists() and direct_entry_path.is_dir():
+        return film_path, witness_videos_path, direct_entry_path, _find_video_file_in_folder(direct_entry_path)
+
+    entry_path = _get_witness_video_entry_path(witness_videos_path, normalized_name)
+    video_path = _safe_join(entry_path, normalized_name)
+
+    if not video_path.exists() or not video_path.is_file():
+        for child in sorted(witness_videos_path.iterdir(), key=lambda path: path.name.lower()):
+            if not child.is_dir():
+                continue
+
+            nested_video_path = _find_video_file_in_folder(child)
+
+            if nested_video_path is not None and nested_video_path.name == normalized_name:
+                return film_path, witness_videos_path, child, nested_video_path
+
+        legacy_video_path = _find_legacy_witness_video_path(witness_videos_path, normalized_name)
+
+        if legacy_video_path.exists() and legacy_video_path.is_file():
+            return film_path, witness_videos_path, None, legacy_video_path
+
+        raise HTTPException(status_code=404, detail='Witness video not found.')
+
+    return film_path, witness_videos_path, entry_path, video_path
 
 
 def _find_reel_source_video_path(reel_path: Path) -> Path | None:
@@ -1383,8 +1416,21 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
     for child in sorted(witness_videos_path.iterdir(), key=lambda path: path.name.lower()):
         if child.is_dir():
             video_path = _find_video_file_in_folder(child)
+            frames_path = _safe_join(child, FRAMES_DIRNAME)
+            frame_count = _count_image_files(frames_path) if frames_path.exists() and frames_path.is_dir() else 0
+
+            if video_path is None and frame_count == 0:
+                continue
 
             if video_path is None:
+                videos.append(
+                    UploadWitnessVideoResponse(
+                        fileName=child.name,
+                        mediaUrl='',
+                        fileSizeBytes=0,
+                        frameCount=frame_count,
+                    )
+                )
                 continue
 
             videos.append(
@@ -1410,6 +1456,47 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
     return WitnessVideosResponse(videos=videos)
 
 
+@app.get(
+    '/api/filesystem/films/{film_id}/witness-videos/{file_name}/frames',
+    responses={
+        404: {'description': 'Film or witness video not found.'},
+    },
+)
+def get_witness_video_frames(film_id: str, file_name: str) -> WitnessFramesResponse:
+    film_path, witness_videos_path, witness_entry_path, video_path = _get_witness_entry_or_404(film_id, file_name)
+    normalized_file_name = Path(file_name).name
+
+    if video_path is not None:
+        normalized_file_name = Path(video_path.name).name
+
+    suffix = Path(normalized_file_name).suffix.lower().strip('.') or 'video'
+    legacy_frames_path = _safe_join(
+        witness_videos_path,
+        f"{_build_media_entry_dir_name(normalized_file_name, 'witness')}_{suffix}_frames",
+    )
+
+    candidate_paths: list[Path] = []
+
+    if witness_entry_path is not None:
+        candidate_paths.append(_safe_join(witness_entry_path, FRAMES_DIRNAME))
+
+    if video_path is not None and video_path.parent != witness_videos_path:
+        candidate_paths.append(_safe_join(video_path.parent, FRAMES_DIRNAME))
+
+    candidate_paths.append(_get_witness_frames_path(witness_videos_path, normalized_file_name))
+    candidate_paths.append(legacy_frames_path)
+
+    frames_path = next((path for path in candidate_paths if path.exists() and path.is_dir()), None)
+
+    if frames_path is None:
+        return WitnessFramesResponse(fileName=normalized_file_name, frames=[])
+
+    image_names = _list_image_filenames(frames_path)
+    frames = [_build_media_url(film_id, film_path, _safe_join(frames_path, name)) for name in image_names]
+
+    return WitnessFramesResponse(fileName=normalized_file_name, frames=frames)
+
+
 @app.delete(
     '/api/filesystem/films/{film_id}/witness-videos/{file_name}',
     status_code=204,
@@ -1418,7 +1505,14 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
     },
 )
 def delete_witness_video(film_id: str, file_name: str) -> None:
-    _, video_path = _get_witness_video_path_or_404(film_id, file_name)
+    _, _, witness_entry_path, video_path = _get_witness_entry_or_404(film_id, file_name)
+
+    if witness_entry_path is not None and witness_entry_path.exists() and witness_entry_path.is_dir():
+        shutil.rmtree(witness_entry_path, ignore_errors=True)
+        return
+
+    if video_path is None:
+        raise HTTPException(status_code=404, detail='Witness video not found.')
 
     if video_path.parent.name in {WITNESS_VIDEOS_DIRNAME, ''}:
         video_path.unlink()

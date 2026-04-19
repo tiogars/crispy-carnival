@@ -222,6 +222,43 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     }
 
 
+def test_get_witness_videos_includes_frame_only_witness_directories(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    witness_folder = tmp_path / 'test_film' / '_witness_videos'
+    frame_only_witness = witness_folder / 'witness1' / 'frames'
+    frame_only_witness.mkdir(parents=True, exist_ok=True)
+    (frame_only_witness / 'frame1000000.jpg').write_bytes(b'frame-1')
+    (frame_only_witness / 'frame1000001.jpg').write_bytes(b'frame-2')
+
+    response = client.get('/api/filesystem/films/test_film/witness-videos')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'videos': [
+            {'fileName': 'witness1', 'mediaUrl': '', 'fileSizeBytes': 0, 'frameCount': 2},
+        ]
+    }
+
+
+def test_get_witness_frames_supports_frame_only_witness_directory(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    witness_frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness1' / 'frames'
+    witness_frames_path.mkdir(parents=True, exist_ok=True)
+    (witness_frames_path / 'frame1000000.jpg').write_bytes(b'frame-1')
+    (witness_frames_path / 'frame1000001.jpg').write_bytes(b'frame-2')
+
+    response = client.get('/api/filesystem/films/test_film/witness-videos/witness1/frames')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'fileName': 'witness1',
+        'frames': [
+            '/media/test_film/_witness_videos/witness1/frames/frame1000000.jpg',
+            '/media/test_film/_witness_videos/witness1/frames/frame1000001.jpg',
+        ],
+    }
+
+
 def test_delete_witness_video_removes_selected_file(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     witness_folder_path = tmp_path / 'test_film' / '_witness_videos' / 'witness'

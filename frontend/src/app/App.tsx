@@ -20,6 +20,7 @@ import {
   SequenceExtractionRequest,
   UploadReelVideoResponse,
   UploadWitnessVideoResponse,
+  WitnessFramesResponse,
   WitnessVideosResponse,
 } from './App.types';
 import { AppFooter } from './components/AppFooter';
@@ -160,6 +161,7 @@ export const App = () => {
   const [overwriteWitnessVideo, setOverwriteWitnessVideo] = useState<boolean>(false);
   const [witnessVideos, setWitnessVideos] = useState<UploadWitnessVideoResponse[]>([]);
   const [witnessesByFilmId, setWitnessesByFilmId] = useState<Record<string, UploadWitnessVideoResponse[]>>({});
+  const [witnessFrameUrls, setWitnessFrameUrls] = useState<string[]>([]);
   const [selectedWitnessVideoUrl, setSelectedWitnessVideoUrl] = useState<string>('');
   const [selectedWitnessFileName, setSelectedWitnessFileName] = useState<string>('');
   const [isDeleteFilmDialogOpen, setDeleteFilmDialogOpen] = useState<boolean>(false);
@@ -387,29 +389,28 @@ export const App = () => {
 
       if (targetFilmId === selectedFilmId) {
         setWitnessVideos(resolvedVideos);
-        setSelectedWitnessVideoUrl((currentVideoUrl) => {
-          if (preferredMediaUrl && resolvedVideos.some((video) => video.mediaUrl === preferredMediaUrl)) {
-            return preferredMediaUrl;
-          }
+        const resolvedSelectedWitness =
+          (preferredMediaUrl ? resolvedVideos.find((video) => video.mediaUrl === preferredMediaUrl) : null) ??
+          (selectedWitnessFileName ? resolvedVideos.find((video) => video.fileName === selectedWitnessFileName) : null) ??
+          (selectedWitnessVideoUrl ? resolvedVideos.find((video) => video.mediaUrl === selectedWitnessVideoUrl) : null) ??
+          resolvedVideos[0] ??
+          null;
 
-          if (currentVideoUrl && resolvedVideos.some((video) => video.mediaUrl === currentVideoUrl)) {
-            return currentVideoUrl;
-          }
-
-          return resolvedVideos[0]?.mediaUrl ?? '';
-        });
+        setSelectedWitnessVideoUrl(resolvedSelectedWitness?.mediaUrl ?? '');
+        setSelectedWitnessFileName(resolvedSelectedWitness?.fileName ?? '');
       }
     } catch {
       if (targetFilmId === selectedFilmId) {
         setWitnessVideos([]);
         setSelectedWitnessVideoUrl('');
+        setSelectedWitnessFileName('');
       }
       setWitnessesByFilmId((prev) => ({
         ...prev,
         [targetFilmId]: [],
       }));
     }
-  }, [selectedFilmId]);
+  }, [selectedFilmId, selectedWitnessFileName, selectedWitnessVideoUrl]);
 
   const loadSequenceExtractionHistory = useCallback(async () => {
     if (!selectedFilmId) {
@@ -829,9 +830,36 @@ export const App = () => {
   const currentFilm = useMemo(() => films.find((f) => f.id === selectedFilmId) || null, [films, selectedFilmId]);
   const currentReel = useMemo(() => reels.find((r) => r.id === selectedReelId) || null, [reels, selectedReelId]);
   const currentWitness = useMemo(
-    () => witnessVideos.find((w) => w.mediaUrl === selectedWitnessVideoUrl) || null,
-    [witnessVideos, selectedWitnessVideoUrl],
+    () =>
+      witnessVideos.find((w) => w.fileName === selectedWitnessFileName) ||
+      witnessVideos.find((w) => w.mediaUrl === selectedWitnessVideoUrl) ||
+      null,
+    [selectedWitnessFileName, selectedWitnessVideoUrl, witnessVideos],
   );
+
+  useEffect(() => {
+    const isWitnessNavigation = selectedNavigationNode.startsWith('witness-');
+
+    if (!isWitnessNavigation || !selectedFilmId || !currentWitness?.fileName) {
+      setWitnessFrameUrls([]);
+      return;
+    }
+
+    const loadWitnessFrames = async () => {
+      try {
+        const payload = await fetchJson<WitnessFramesResponse>(
+          `/api/filesystem/films/${selectedFilmId}/witness-videos/${encodeURIComponent(currentWitness.fileName)}/frames`,
+        );
+        setWitnessFrameUrls(
+          payload.frames.map((frameUrl) => (frameUrl.startsWith('http') ? frameUrl : `${apiBaseUrl}${frameUrl}`)),
+        );
+      } catch {
+        setWitnessFrameUrls([]);
+      }
+    };
+
+    void loadWitnessFrames();
+  }, [currentWitness?.fileName, selectedFilmId, selectedNavigationNode]);
 
   const parseScopedReelNode = (value: string) => {
     const [filmId, reelId, sequenceReelId] = value.split('::');
@@ -1074,6 +1102,7 @@ export const App = () => {
             <WitnessDetailPage
               film={currentFilm}
               witness={currentWitness}
+              frameUrls={witnessFrameUrls}
               isDeleting={isDeletingWitnessVideo}
               isExtracting={isStartingSequenceExtraction || sequenceExtractionJob?.status === 'queued' || sequenceExtractionJob?.status === 'running'}
               onDelete={() => setDeleteWitnessDialogOpen(true)}

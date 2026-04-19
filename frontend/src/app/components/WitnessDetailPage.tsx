@@ -1,13 +1,51 @@
-import { Box, Button, Paper, Typography } from '@mui/material';
+import { Box, Button, Paper, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExtensionIcon from '@mui/icons-material/Extension';
+import { Player } from '@remotion/player';
 import { useEffect, useState } from 'react';
 
 import type { Film, UploadWitnessVideoResponse } from '../App.types';
+import { FilmSequenceComposition } from '../../features/film-viewer/FilmSequenceComposition';
+import { ImageStepPlayer } from '../../features/film-viewer/ImageStepPlayer';
+
+const getVideoMimeType = (fileNameOrUrl: string | null | undefined) => {
+  if (!fileNameOrUrl) {
+    return undefined;
+  }
+
+  const normalizedValue = fileNameOrUrl.split('?')[0]?.toLowerCase() ?? '';
+
+  if (normalizedValue.endsWith('.mov')) {
+    return 'video/quicktime';
+  }
+
+  if (normalizedValue.endsWith('.mp4')) {
+    return 'video/mp4';
+  }
+
+  if (normalizedValue.endsWith('.m4v')) {
+    return 'video/x-m4v';
+  }
+
+  if (normalizedValue.endsWith('.webm')) {
+    return 'video/webm';
+  }
+
+  if (normalizedValue.endsWith('.avi')) {
+    return 'video/x-msvideo';
+  }
+
+  if (normalizedValue.endsWith('.mkv')) {
+    return 'video/x-matroska';
+  }
+
+  return undefined;
+};
 
 type WitnessDetailPageProps = {
   film: Film | null;
   witness: UploadWitnessVideoResponse | null;
+  frameUrls: string[];
   isDeleting: boolean;
   isExtracting: boolean;
   onDelete: () => void;
@@ -17,16 +55,31 @@ type WitnessDetailPageProps = {
 export const WitnessDetailPage = ({
   film,
   witness,
+  frameUrls,
   isDeleting,
   isExtracting,
   onDelete,
   onExtractSequence,
 }: Readonly<WitnessDetailPageProps>) => {
+  const hasFrames = frameUrls.length > 0;
+  const hasSourceVideo = Boolean(witness?.mediaUrl);
+  const defaultPlayerMode = hasFrames ? 'animated' : 'source';
+  const [playerMode, setPlayerMode] = useState<'animated' | 'source' | 'step'>(defaultPlayerMode);
   const [hasVideoError, setHasVideoError] = useState(false);
 
   useEffect(() => {
+    setPlayerMode(defaultPlayerMode);
     setHasVideoError(false);
-  }, [witness?.mediaUrl]);
+  }, [defaultPlayerMode, witness?.mediaUrl]);
+
+  const handlePlayerModeChange = (
+    event: React.MouseEvent<HTMLElement>,
+    newMode: 'animated' | 'source' | 'step' | null,
+  ) => {
+    if (newMode !== null) {
+      setPlayerMode(newMode);
+    }
+  };
 
   if (!film || !witness) {
     return (
@@ -80,22 +133,46 @@ export const WitnessDetailPage = ({
       >
         <Box
           sx={{
-            position: 'relative',
-            flex: 1,
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            overflow: 'hidden',
+            gap: 1,
+            marginBottom: 1,
+            flexWrap: 'wrap',
           }}
         >
+          <ToggleButtonGroup
+            value={playerMode}
+            exclusive
+            onChange={handlePlayerModeChange}
+            size="small"
+            sx={{
+              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+              '& .MuiToggleButton-root': {
+                color: '#90caf9',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                '&.Mui-selected': {
+                  backgroundColor: 'rgba(144, 202, 249, 0.2)',
+                  color: '#fff',
+                },
+              },
+            }}
+          >
+            {hasSourceVideo ? (
+              <ToggleButton value="source" aria-label="source video player">
+                Source video
+              </ToggleButton>
+            ) : null}
+            <ToggleButton value="animated" aria-label="animated player">
+              Animated
+            </ToggleButton>
+            <ToggleButton value="step" aria-label="step player">
+              Step
+            </ToggleButton>
+          </ToggleButtonGroup>
+
           <Box
             sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              zIndex: 2,
               display: 'flex',
               gap: 1,
               flexWrap: 'wrap',
@@ -119,7 +196,7 @@ export const WitnessDetailPage = ({
               variant="contained"
               startIcon={<ExtensionIcon />}
               onClick={onExtractSequence}
-              disabled={isExtracting}
+              disabled={isExtracting || !hasSourceVideo}
               size="small"
             >
               Extract Sequence
@@ -135,24 +212,57 @@ export const WitnessDetailPage = ({
               Delete Video
             </Button>
           </Box>
-
-          <Box
-            component="video"
-            src={witness.mediaUrl}
-            controls
-            onError={() => setHasVideoError(true)}
-            onLoadedData={() => setHasVideoError(false)}
-            sx={{
-              width: '100%',
-              height: '100%',
-              maxHeight: 400,
-              objectFit: 'contain',
-              borderRadius: 1,
-            }}
-          />
         </Box>
 
-        {hasVideoError ? (
+        <Box
+          sx={{
+            position: 'relative',
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden',
+          }}
+        >
+          {playerMode === 'source' && hasSourceVideo ? (
+            <Box
+              component="video"
+              controls
+              preload="metadata"
+              onError={() => setHasVideoError(true)}
+              onLoadedData={() => setHasVideoError(false)}
+              sx={{
+                width: '100%',
+                height: '100%',
+                maxHeight: 400,
+                objectFit: 'contain',
+                borderRadius: 1,
+              }}
+            >
+              <source src={witness.mediaUrl || undefined} type={getVideoMimeType(witness.fileName || witness.mediaUrl)} />
+            </Box>
+          ) : playerMode === 'animated' ? (
+            <Player
+              acknowledgeRemotionLicense
+              component={FilmSequenceComposition}
+              inputProps={{ frameUrls }}
+              durationInFrames={hasFrames ? frameUrls.length : 1}
+              compositionWidth={1280}
+              compositionHeight={720}
+              fps={24}
+              controls
+              autoPlay={false}
+              loop
+              style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden' }}
+            />
+          ) : (
+            <ImageStepPlayer frameUrls={frameUrls} />
+          )}
+        </Box>
+
+        {playerMode === 'source' && hasVideoError ? (
           <Box
             sx={{
               marginTop: 1,
@@ -219,6 +329,15 @@ export const WitnessDetailPage = ({
             </Typography>
             <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
               {typeof witness.frameCount === 'number' ? witness.frameCount : 'Unknown'}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Playback
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {hasFrames
+                ? `Loaded ${frameUrls.length} frame(s) for animated and step playback.`
+                : 'No extracted frames found for this witness yet.'}
             </Typography>
           </Box>
         </Box>

@@ -889,4 +889,67 @@ describe('App create film modal', () => {
 
     await screen.findByRole('heading', { name: 'source_reel_auto' });
   }, 20000);
+
+  it('shows a frame-only witness directory in the tree and opens it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        return Promise.resolve(
+          jsonResponse({
+            films: [{ id: 'Test1', displayName: 'Test1' }],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/witness-videos') {
+        return Promise.resolve(
+          jsonResponse({
+            videos: [
+              {
+                fileName: 'witness1',
+                mediaUrl: '',
+                fileSizeBytes: 0,
+                frameCount: 10,
+              },
+            ],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/Test1/witness-videos/witness1/frames') {
+        return Promise.resolve(
+          jsonResponse({
+            fileName: 'witness1',
+            frames: [
+              '/media/Test1/_witness_videos/witness1/frames/frame1000000.jpg',
+              '/media/Test1/_witness_videos/witness1/frames/frame1000001.jpg',
+            ],
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Test1' }));
+    await user.click(await screen.findByRole('button', { name: 'Witnesses' }));
+    await user.click(await screen.findByRole('button', { name: 'witness1' }));
+
+    await screen.findByRole('heading', { name: 'witness1' });
+    await screen.findByText('Loaded 2 frame(s) for animated and step playback.');
+  }, 20000);
 });
