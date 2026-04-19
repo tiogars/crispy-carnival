@@ -414,7 +414,30 @@ export const App = () => {
       );
 
       const resolvedMediaUrl = payload.mediaUrl.startsWith('http') ? payload.mediaUrl : `${apiBaseUrl}${payload.mediaUrl}`;
-      await loadWitnessVideos(selectedFilmId, resolvedMediaUrl);
+      const uploadedWitness: UploadWitnessVideoResponse = {
+        ...payload,
+        mediaUrl: resolvedMediaUrl,
+      };
+
+      setWitnessesByFilmId((prev) => {
+        const existing = prev[selectedFilmId] ?? [];
+        const withoutSameName = existing.filter((video) => video.fileName !== uploadedWitness.fileName);
+
+        return {
+          ...prev,
+          [selectedFilmId]: [...withoutSameName, uploadedWitness],
+        };
+      });
+
+      setWitnessVideos((current) => {
+        const withoutSameName = current.filter((video) => video.fileName !== uploadedWitness.fileName);
+        return [...withoutSameName, uploadedWitness];
+      });
+      setSelectedWitnessVideoUrl(uploadedWitness.mediaUrl);
+      setSelectedWitnessFileName(uploadedWitness.fileName);
+      setSelectedNavigationNode(`witness-${selectedFilmId}-${uploadedWitness.fileName}`);
+
+      void loadWitnessVideos(selectedFilmId, resolvedMediaUrl);
 
       setSuccessMessage(`Witness video "${payload.fileName}" uploaded successfully.`);
       closeUploadWitnessDialog();

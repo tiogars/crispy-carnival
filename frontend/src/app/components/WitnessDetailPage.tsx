@@ -178,6 +178,13 @@ export const WitnessDetailPage = ({
             <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
               {(witness.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
             </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Frames
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {typeof witness.frameCount === 'number' ? witness.frameCount : 'Unknown'}
+            </Typography>
           </Box>
         </Box>
       </Paper>

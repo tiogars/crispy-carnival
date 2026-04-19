@@ -68,6 +68,7 @@ class UploadWitnessVideoResponse(BaseModel):
     fileName: str
     mediaUrl: str
     fileSizeBytes: int
+    frameCount: int | None = None
 
 
 class UploadReelVideoResponse(BaseModel):
@@ -395,6 +396,53 @@ def _get_media_duration_seconds(video_path: Path) -> float | None:
         return None
 
     return duration_seconds if duration_seconds > 0 else None
+
+
+def _get_media_frame_count(video_path: Path) -> int | None:
+    ffprobe_path = shutil.which('ffprobe')
+
+    if ffprobe_path is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            [
+                ffprobe_path,
+                '-v',
+                'error',
+                '-count_frames',
+                '-select_streams',
+                'v:0',
+                '-show_entries',
+                'stream=nb_read_frames,nb_frames',
+                '-of',
+                'default=noprint_wrappers=1:nokey=1',
+                str(video_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    raw_values = [line.strip() for line in result.stdout.splitlines() if line.strip() and line.strip() != 'N/A']
+
+    for raw_value in raw_values:
+        try:
+            frame_count = int(raw_value)
+        except ValueError:
+            continue
+
+        if frame_count > 0:
+            return frame_count
+
+    return None
 
 
 def _parse_ffmpeg_progress_seconds(progress_line: str) -> float | None:
@@ -868,6 +916,7 @@ def upload_witness_video(
         fileName=file_name,
         mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
         fileSizeBytes=target_path.stat().st_size,
+        frameCount=_get_media_frame_count(target_path),
     )
 
 
@@ -890,6 +939,7 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
             fileName=file_name,
             mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
             fileSizeBytes=(witness_videos_path / file_name).stat().st_size,
+            frameCount=None,
         )
         for file_name in _list_video_filenames(witness_videos_path)
     ]

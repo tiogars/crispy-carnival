@@ -28,6 +28,7 @@ export type UploadWitnessVideoResponse = {
   fileName: string;
   mediaUrl: string;
   fileSizeBytes: number;
+  frameCount?: number | null;
 };
 
 export type UploadReelVideoResponse = {

@@ -5,7 +5,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import MovieIcon from '@mui/icons-material/Movie';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Film, NavigationNode, Reel, UploadWitnessVideoResponse } from '../App.types';
 
@@ -22,13 +22,20 @@ type TreeItemProps = {
   label: string;
   icon: React.ReactNode;
   isSelected: boolean;
+  isBranchSelected?: boolean;
   onSelect: (nodeId: NavigationNode) => void;
   children?: React.ReactNode;
   hasChildren?: boolean;
 };
 
-const TreeItemButton = ({ nodeId, label, icon, isSelected, onSelect, children, hasChildren }: TreeItemProps) => {
+const TreeItemButton = ({ nodeId, label, icon, isSelected, isBranchSelected, onSelect, children, hasChildren }: TreeItemProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    if (hasChildren && isBranchSelected) {
+      setIsExpanded(true);
+    }
+  }, [hasChildren, isBranchSelected]);
 
   return (
     <Box>
@@ -102,6 +109,7 @@ export const AppNavigationTree = ({
             label={film.displayName}
             icon={<MovieIcon />}
             isSelected={selectedNode === `film-${film.id}`}
+            isBranchSelected={selectedNode === `film-${film.id}` || selectedNode.startsWith(`witnesses-${film.id}`) || selectedNode.startsWith(`witness-${film.id}-`) || selectedNode.startsWith(`reels-${film.id}`) || selectedNode.startsWith(`reel-${film.id}-`)}
             onSelect={onNodeSelect}
             hasChildren
           >
@@ -110,6 +118,7 @@ export const AppNavigationTree = ({
               label="Witnesses"
               icon={<VideoLibraryIcon />}
               isSelected={selectedNode === `witnesses-${film.id}`}
+              isBranchSelected={selectedNode === `witnesses-${film.id}` || selectedNode.startsWith(`witness-${film.id}-`)}
               onSelect={onNodeSelect}
               hasChildren={Boolean((witnessVideos[film.id]?.length ?? 0) > 0)}
             >
@@ -130,6 +139,7 @@ export const AppNavigationTree = ({
               label="Reels"
               icon={<VideoLibraryIcon />}
               isSelected={selectedNode === `reels-${film.id}`}
+              isBranchSelected={selectedNode === `reels-${film.id}` || selectedNode.startsWith(`reel-${film.id}-`)}
               onSelect={onNodeSelect}
               hasChildren={Boolean((reels[film.id]?.length ?? 0) > 0)}
             >

@@ -41,6 +41,8 @@ def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypat
     assert response.json() == {
         'fileName': 'witness.mp4',
         'mediaUrl': '/media/test_film/_witness_videos/witness.mp4',
+        'fileSizeBytes': 11,
+        'frameCount': None,
     }
     assert (film_path / '_witness_videos' / 'witness.mp4').read_bytes() == b'video-bytes'
 
@@ -107,8 +109,8 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert response.json() == {
         'videos': [
-            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a.mp4'},
-            {'fileName': 'b.mov', 'mediaUrl': '/media/test_film/_witness_videos/b.mov'},
+            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a.mp4', 'fileSizeBytes': 1, 'frameCount': None},
+            {'fileName': 'b.mov', 'mediaUrl': '/media/test_film/_witness_videos/b.mov', 'fileSizeBytes': 1, 'frameCount': None},
         ]
     }
 
