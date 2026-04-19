@@ -70,6 +70,11 @@ class UploadWitnessVideoResponse(BaseModel):
     fileSizeBytes: int
 
 
+class UploadReelVideoResponse(BaseModel):
+    reel: ReelItem
+    sourceVideoName: str
+
+
 class WitnessVideosResponse(BaseModel):
     videos: list[UploadWitnessVideoResponse]
 
@@ -298,6 +303,30 @@ def _build_sequence_extraction_command(
         'image2',
         str(output_dir / 'frame%05d.jpg'),
     ]
+
+
+def _build_reel_import_command(video_path: Path, output_dir: Path) -> list[str]:
+    return [
+        'ffmpeg',
+        '-y',
+        '-i',
+        str(video_path),
+        '-vsync',
+        '0',
+        str(output_dir / 'frame%05d.jpg'),
+    ]
+
+
+def _import_reel_video_frames(video_path: Path, output_dir: Path) -> None:
+    result = subprocess.run(
+        _build_reel_import_command(video_path, output_dir),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or 'ffmpeg failed to import the reel video.')
 
 
 def _update_sequence_extraction_job(job_id: str, **changes: str | int | float | None) -> None:
@@ -663,6 +692,18 @@ def create_film(payload: CreateFilmRequest) -> CreateFilmResponse:
         raise HTTPException(status_code=500, detail='error during film creation') from error
 
 
+@app.delete(
+    '/api/filesystem/films/{film_id}',
+    status_code=204,
+    responses={
+        404: {'description': 'Film not found.'},
+    },
+)
+def delete_film(film_id: str) -> None:
+    film_path = _get_film_path_or_404(film_id)
+    shutil.rmtree(film_path)
+
+
 @app.get(
     '/api/filesystem/films/{film_id}/reels',
     responses={
@@ -707,6 +748,82 @@ def get_reel_frames(film_id: str, reel_id: str) -> FramesResponse:
     ]
 
     return FramesResponse(reelId=reel_id, frames=frames)
+
+
+@app.post(
+    '/api/filesystem/films/{film_id}/reel-video',
+    status_code=201,
+    responses={
+        400: {'description': 'Invalid file payload.'},
+        404: {'description': 'Film not found.'},
+        409: {'description': 'A reel with this name already exists.'},
+        500: {'description': 'Error during reel video upload.'},
+        503: {'description': 'FFmpeg is required to import reel videos.'},
+    },
+)
+def upload_reel_video(
+    film_id: str,
+    file: Annotated[UploadFile, File(...)],
+    overwrite: Annotated[bool, Form()] = False,
+    reel_name: Annotated[str | None, Form()] = None,
+) -> UploadReelVideoResponse:
+    if not _ffmpeg_is_available():
+        raise HTTPException(status_code=503, detail='FFmpeg is required to import reel videos.')
+
+    film_path = _get_film_path_or_404(film_id)
+
+    file_name = Path(file.filename or '').name
+
+    if not file_name:
+        raise HTTPException(status_code=400, detail='A reel video file is required.')
+
+    try:
+        reel_id = _build_reel_id(reel_name if reel_name else Path(file_name).stem)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail='Reel name must contain letters or numbers.') from error
+
+    if reel_id == WITNESS_VIDEOS_DIRNAME:
+        raise HTTPException(status_code=400, detail='Reel name is reserved.')
+
+    target_path = _safe_join(film_path, reel_id)
+
+    if target_path.exists():
+        if not overwrite:
+            raise HTTPException(status_code=409, detail='A reel with this name already exists.')
+
+        if target_path.is_dir():
+            shutil.rmtree(target_path)
+        else:
+            target_path.unlink()
+
+    target_path.mkdir(parents=False, exist_ok=False)
+
+    temp_video_path = target_path / f'_upload_{uuid4().hex}{Path(file_name).suffix}'
+
+    try:
+        with temp_video_path.open('wb') as output_stream:
+            shutil.copyfileobj(file.file, output_stream)
+
+        _import_reel_video_frames(temp_video_path, target_path)
+        frame_count = _count_image_files(target_path)
+
+        if frame_count == 0:
+            raise RuntimeError('No frames were generated from the uploaded video.')
+    except HTTPException:
+        raise
+    except Exception as error:
+        shutil.rmtree(target_path, ignore_errors=True)
+        raise HTTPException(status_code=500, detail='Error during reel video upload.') from error
+    finally:
+        file.file.close()
+
+        if temp_video_path.exists():
+            temp_video_path.unlink()
+
+    return UploadReelVideoResponse(
+        reel=ReelItem(id=reel_id, frameCount=frame_count),
+        sourceVideoName=file_name,
+    )
 
 
 @app.post(

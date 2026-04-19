@@ -45,6 +45,27 @@ def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypat
     assert (film_path / '_witness_videos' / 'witness.mp4').read_bytes() == b'video-bytes'
 
 
+def test_delete_film_removes_film_directory(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    film_path = tmp_path / 'test_film'
+    (film_path / 'reel_01').mkdir(parents=True, exist_ok=True)
+    (film_path / 'reel_01' / 'frame00001.jpg').write_bytes(b'frame')
+
+    response = client.delete('/api/filesystem/films/test_film')
+
+    assert response.status_code == 204
+    assert not film_path.exists()
+
+
+def test_delete_film_returns_404_when_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+
+    response = client.delete('/api/filesystem/films/missing_film')
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Film not found.'}
+
+
 def test_upload_witness_video_returns_404_when_film_does_not_exist(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
 
@@ -133,6 +154,53 @@ def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
             }
         ]
     }
+
+
+def test_upload_reel_video_creates_reel_folder_from_uploaded_video(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
+
+    def fake_import(video_path: Path, output_dir: Path) -> None:
+        assert video_path.exists()
+        (output_dir / 'frame00001.jpg').write_bytes(b'1')
+        (output_dir / 'frame00002.jpg').write_bytes(b'2')
+
+    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
+
+    film_path = tmp_path / 'test_film'
+    film_path.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/reel-video',
+        files={'file': ('reel-source.mp4', b'video-bytes', 'video/mp4')},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        'reel': {
+            'id': 'reel_source',
+            'frameCount': 2,
+        },
+        'sourceVideoName': 'reel-source.mp4',
+    }
+    assert (film_path / 'reel_source' / 'frame00001.jpg').exists()
+    assert (film_path / 'reel_source' / 'frame00002.jpg').exists()
+
+
+def test_upload_reel_video_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
+
+    film_path = tmp_path / 'test_film'
+    film_path.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        '/api/filesystem/films/test_film/reel-video',
+        files={'file': ('reel-source.mp4', b'video-bytes', 'video/mp4')},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'FFmpeg is required to import reel videos.'}
 
 
 def test_start_sequence_extraction_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):

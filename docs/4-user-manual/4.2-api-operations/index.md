@@ -97,6 +97,27 @@ Optionally creates a first reel subfolder at the same time.
 
 ---
 
+### Delete film
+
+```text
+DELETE /api/filesystem/films/{film_id}
+```
+
+Deletes the entire film directory identified by `film_id`, including all reels,
+frames, witness videos, and extraction metadata inside that folder.
+
+#### Response — `204 No Content`
+
+No response body.
+
+#### Error responses
+
+| Status | Condition |
+| ------ | --------- |
+| `404` | Film directory not found. |
+
+---
+
 ### List reels
 
 ```text

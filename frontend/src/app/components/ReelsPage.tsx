@@ -1,4 +1,4 @@
-import { Box, Card, CardActionArea, CardContent, Grid, Paper, Typography } from '@mui/material';
+import { Box, Button, Card, CardActionArea, CardContent, Grid, Paper, Typography } from '@mui/material';
 
 import type { Film, Reel } from '../App.types';
 
@@ -6,6 +6,7 @@ type ReelsPageProps = {
   film: Film | null;
   reels: Reel[];
   isLoading: boolean;
+  onUploadVideo: () => void;
   onSelectReel: (reelId: string) => void;
 };
 
@@ -13,6 +14,7 @@ export const ReelsPage = ({
   film,
   reels,
   isLoading,
+  onUploadVideo,
   onSelectReel,
 }: Readonly<ReelsPageProps>) => {
   if (!film) {
@@ -46,12 +48,28 @@ export const ReelsPage = ({
           boxShadow: '0 8px 24px rgba(17, 25, 40, 0.08)',
         }}
       >
-        <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Reels
-        </Typography>
-        <Typography color="text.secondary" variant="body2">
-          {film.displayName}
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            justifyContent: 'space-between',
+            gap: 2,
+            flexDirection: { xs: 'column', sm: 'row' },
+          }}
+        >
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              Reels
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              {film.displayName}
+            </Typography>
+          </Box>
+
+          <Button variant="contained" onClick={onUploadVideo} disabled={isLoading}>
+            Upload video
+          </Button>
+        </Box>
       </Paper>
 
       {reels.length === 0 ? (
@@ -64,7 +82,7 @@ export const ReelsPage = ({
           }}
         >
           <Typography color="text.secondary">
-            No reels yet. Upload witness videos and extract sequences to create reels.
+            No reels yet. Upload a video to import a reel, or extract sequences from a witness video.
           </Typography>
         </Paper>
       ) : (

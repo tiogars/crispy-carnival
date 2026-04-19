@@ -1,4 +1,4 @@
-import { Box, Paper, Typography } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Typography } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,6 +18,7 @@ import {
   SequenceExtractionJobsHistoryResponse,
   SequenceExtractionJobStatusResponse,
   SequenceExtractionRequest,
+  UploadReelVideoResponse,
   UploadWitnessVideoResponse,
   WitnessVideosResponse,
 } from './App.types';
@@ -33,6 +34,7 @@ import { WitnessesPage } from './components/WitnessesPage';
 import { CreateFilmDialog } from './components/dialogs/CreateFilmDialog';
 import { DeleteWitnessDialog } from './components/dialogs/DeleteWitnessDialog';
 import { SequenceExtractionDialog } from './components/dialogs/SequenceExtractionDialog';
+import { UploadReelVideoDialog } from './components/dialogs/UploadReelVideoDialog';
 import { UploadWitnessDialog } from './components/dialogs/UploadWitnessDialog';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -143,13 +145,20 @@ export const App = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCreateFilmDialogOpen, setCreateFilmDialogOpen] = useState<boolean>(false);
   const [isUploadWitnessDialogOpen, setUploadWitnessDialogOpen] = useState<boolean>(false);
+  const [isUploadReelDialogOpen, setUploadReelDialogOpen] = useState<boolean>(false);
   const [selectedWitnessVideo, setSelectedWitnessVideo] = useState<File | null>(null);
+  const [selectedReelVideo, setSelectedReelVideo] = useState<File | null>(null);
   const [isUploadingWitnessVideo, setUploadingWitnessVideo] = useState<boolean>(false);
+  const [isUploadingReelVideo, setUploadingReelVideo] = useState<boolean>(false);
+  const [overwriteReelVideo, setOverwriteReelVideo] = useState<boolean>(false);
+  const [reelUploadName, setReelUploadName] = useState<string>('');
   const [overwriteWitnessVideo, setOverwriteWitnessVideo] = useState<boolean>(false);
   const [witnessVideos, setWitnessVideos] = useState<UploadWitnessVideoResponse[]>([]);
   const [witnessesByFilmId, setWitnessesByFilmId] = useState<Record<string, UploadWitnessVideoResponse[]>>({});
   const [selectedWitnessVideoUrl, setSelectedWitnessVideoUrl] = useState<string>('');
   const [selectedWitnessFileName, setSelectedWitnessFileName] = useState<string>('');
+  const [isDeleteFilmDialogOpen, setDeleteFilmDialogOpen] = useState<boolean>(false);
+  const [isDeletingFilm, setDeletingFilm] = useState<boolean>(false);
   const [isDeleteWitnessDialogOpen, setDeleteWitnessDialogOpen] = useState<boolean>(false);
   const [isDeletingWitnessVideo, setDeletingWitnessVideo] = useState<boolean>(false);
   const [isSequenceExtractionDialogOpen, setSequenceExtractionDialogOpen] = useState<boolean>(false);
@@ -272,6 +281,13 @@ export const App = () => {
     setUploadWitnessDialogOpen(false);
     setSelectedWitnessVideo(null);
     setOverwriteWitnessVideo(false);
+  };
+
+  const closeUploadReelDialog = () => {
+    setUploadReelDialogOpen(false);
+    setSelectedReelVideo(null);
+    setOverwriteReelVideo(false);
+    setReelUploadName('');
   };
 
   const closeSequenceExtractionDialog = () => {
@@ -409,6 +425,46 @@ export const App = () => {
     }
   };
 
+  const submitReelVideoUpload = async () => {
+    if (!selectedFilmId) {
+      setErrorMessage('Select a film before uploading a reel video.');
+      return;
+    }
+
+    if (!selectedReelVideo) {
+      setErrorMessage('Choose a reel video file first.');
+      return;
+    }
+
+    setUploadingReelVideo(true);
+    setErrorMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedReelVideo);
+      formData.append('overwrite', overwriteReelVideo ? 'true' : 'false');
+
+      if (reelUploadName.trim()) {
+        formData.append('reel_name', reelUploadName.trim());
+      }
+
+      const payload = await postFormData<UploadReelVideoResponse>(
+        `/api/filesystem/films/${selectedFilmId}/reel-video`,
+        formData,
+      );
+
+      await loadReelsForFilm(selectedFilmId, payload.reel.id);
+      setSelectedReelId(payload.reel.id);
+      setSelectedNavigationNode(`reel-${selectedFilmId}-${payload.reel.id}`);
+      setSuccessMessage(`Video "${payload.sourceVideoName}" imported as reel "${payload.reel.id}".`);
+      closeUploadReelDialog();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to upload reel video.');
+    } finally {
+      setUploadingReelVideo(false);
+    }
+  };
+
   const submitWitnessVideoDelete = async () => {
     if (!selectedFilmId || !currentWitness) {
       setErrorMessage('Select a witness video to delete.');
@@ -429,6 +485,56 @@ export const App = () => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to delete witness video.');
     } finally {
       setDeletingWitnessVideo(false);
+    }
+  };
+
+  const submitFilmDelete = async () => {
+    if (!selectedFilmId || !currentFilm) {
+      setErrorMessage('Select a film to delete.');
+      return;
+    }
+
+    setDeletingFilm(true);
+    setErrorMessage('');
+
+    const deletedFilmId = selectedFilmId;
+    const deletedFilmName = currentFilm.displayName;
+    const fallbackFilm = films.find((film) => film.id !== deletedFilmId) ?? null;
+
+    try {
+      await deleteRequest(`/api/filesystem/films/${deletedFilmId}`);
+
+      setReelsByFilmId((previous) => {
+        const next = { ...previous };
+        delete next[deletedFilmId];
+        return next;
+      });
+      setWitnessesByFilmId((previous) => {
+        const next = { ...previous };
+        delete next[deletedFilmId];
+        return next;
+      });
+
+      if (fallbackFilm) {
+        setSelectedFilmId(fallbackFilm.id);
+        setSelectedNavigationNode(`film-${fallbackFilm.id}`);
+      } else {
+        setSelectedFilmId('');
+        setSelectedNavigationNode('home');
+      }
+
+      setSelectedReelId('');
+      setFrameUrls([]);
+      setWitnessVideos([]);
+      setSelectedWitnessVideoUrl('');
+      setSelectedWitnessFileName('');
+      await loadFilms(fallbackFilm?.id);
+      setSuccessMessage(`Film "${deletedFilmName}" deleted successfully.`);
+      setDeleteFilmDialogOpen(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete film.');
+    } finally {
+      setDeletingFilm(false);
     }
   };
 
@@ -748,11 +854,24 @@ export const App = () => {
                   padding: 2,
                   borderRadius: 1.5,
                   boxShadow: '0 8px 24px rgba(17, 25, 40, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1,
                 }}
               >
                 <Typography variant="h5" sx={{ fontWeight: 600 }}>
                   {currentFilm?.displayName}
                 </Typography>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  color="error"
+                  onClick={() => setDeleteFilmDialogOpen(true)}
+                  disabled={!currentFilm || isDeletingFilm}
+                >
+                  Delete film
+                </Button>
               </Paper>
             </Box>
           )}
@@ -794,6 +913,7 @@ export const App = () => {
               film={currentFilm}
               reels={reelsByFilmId[navigationContext.filmId] || []}
               isLoading={isLoading}
+              onUploadVideo={() => setUploadReelDialogOpen(true)}
               onSelectReel={(reelId) => {
                 setSelectedReelId(reelId);
                 setSelectedNavigationNode(`reel-${navigationContext.filmId}-${reelId}`);
@@ -821,6 +941,38 @@ export const App = () => {
         onSubmit={submitCreateFilm}
       />
 
+      <Dialog
+        open={isDeleteFilmDialogOpen}
+        onClose={() => {
+          if (!isDeletingFilm) {
+            setDeleteFilmDialogOpen(false);
+          }
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Confirm film deletion</DialogTitle>
+        <DialogContent dividers>
+          <p>Delete film "{currentFilm?.displayName ?? ''}"?</p>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteFilmDialogOpen(false)} disabled={isDeletingFilm}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            color="error"
+            variant="contained"
+            onClick={() => {
+              void submitFilmDelete();
+            }}
+            disabled={isDeletingFilm || !currentFilm}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <DeleteWitnessDialog
         open={isDeleteWitnessDialogOpen}
         isDeleting={isDeletingWitnessVideo}
@@ -845,6 +997,21 @@ export const App = () => {
         onOverwriteChange={setOverwriteWitnessVideo}
         onUpload={() => {
           void submitWitnessVideoUpload();
+        }}
+      />
+
+      <UploadReelVideoDialog
+        open={isUploadReelDialogOpen}
+        isUploading={isUploadingReelVideo}
+        selectedVideo={selectedReelVideo}
+        reelName={reelUploadName}
+        overwriteExisting={overwriteReelVideo}
+        onClose={closeUploadReelDialog}
+        onFileChange={setSelectedReelVideo}
+        onReelNameChange={setReelUploadName}
+        onOverwriteChange={setOverwriteReelVideo}
+        onUpload={() => {
+          void submitReelVideoUpload();
         }}
       />
 

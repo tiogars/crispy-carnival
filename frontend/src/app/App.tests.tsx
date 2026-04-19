@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -284,6 +284,110 @@ describe('App create film modal', () => {
     expect(uploadBody.get('overwrite')).toBe('false');
   }, 20000);
 
+  it('uploads a video from the reels page and navigates to the imported reel detail page', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      const reelsCalls = fetchMock.mock.calls.filter(
+        ([url, requestInit]) =>
+          String(url) === '/api/filesystem/films/existing_film/reels' && (requestInit?.method ?? 'GET') === 'GET',
+      ).length;
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        return Promise.resolve(
+          jsonResponse({
+            films: [{ id: 'existing_film', displayName: 'Existing Film' }],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels') {
+        if (reelsCalls > 1) {
+          return Promise.resolve(
+            jsonResponse({
+              reels: [{ id: 'imported_reel', frameCount: 2 }],
+            }),
+          );
+        }
+
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'POST' && path === '/api/filesystem/films/existing_film/reel-video') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              reel: {
+                id: 'imported_reel',
+                frameCount: 2,
+              },
+              sourceVideoName: 'reel-source.mp4',
+            },
+            201,
+          ),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels/imported_reel/frames') {
+        return Promise.resolve(
+          jsonResponse({
+            reelId: 'imported_reel',
+            frames: [],
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Existing Film' }));
+    await user.click(await screen.findByRole('button', { name: 'Reels' }));
+    await user.click(await screen.findByRole('button', { name: 'Upload video' }));
+
+    const uploadDialog = await screen.findByRole('dialog', { name: 'Upload video' });
+    const file = new File(['fake-video'], 'reel-source.mp4', { type: 'video/mp4' });
+    await user.upload(within(uploadDialog).getByTestId('reel-video-input'), file);
+    await user.type(within(uploadDialog).getByLabelText('Reel name (optional)'), 'Imported Reel');
+    await user.click(within(uploadDialog).getByRole('button', { name: 'Upload video' }));
+
+    await screen.findByText('Video "reel-source.mp4" imported as reel "imported_reel".');
+    await screen.findByText('imported_reel');
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, requestInit]) =>
+            String(url) === '/api/filesystem/films/existing_film/reels/imported_reel/frames' &&
+            (requestInit?.method ?? 'GET') === 'GET',
+        ),
+      ).toBe(true);
+    });
+
+    const uploadCall = fetchMock.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === '/api/filesystem/films/existing_film/reel-video' && requestInit?.method === 'POST',
+    );
+
+    expect(uploadCall).toBeDefined();
+    expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData);
+
+    const uploadBody = uploadCall?.[1]?.body as FormData;
+    expect(uploadBody.get('overwrite')).toBe('false');
+    expect(uploadBody.get('reel_name')).toBe('Imported Reel');
+  }, 20000);
+
   it('deletes selected witness video after confirmation from preview area', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const path = String(input);
@@ -346,6 +450,82 @@ describe('App create film modal', () => {
 
     expect(deleteCall).toBeDefined();
     expect(screen.queryByRole('link', { name: 'Open direct file' })).toBeNull();
+  }, 10000);
+
+  it('shows a delete film action for selected film and deletes it after confirmation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+      const filmsCalls = fetchMock.mock.calls.filter(
+        ([url, requestInit]) => String(url) === '/api/filesystem/films' && (requestInit?.method ?? 'GET') === 'GET',
+      ).length;
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        if (filmsCalls > 1) {
+          return Promise.resolve(
+            jsonResponse({
+              films: [{ id: 'other_film', displayName: 'Other Film' }],
+            }),
+          );
+        }
+
+        return Promise.resolve(
+          jsonResponse({
+            films: [
+              { id: 'existing_film', displayName: 'Existing Film' },
+              { id: 'other_film', displayName: 'Other Film' },
+            ],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/other_film/reels') {
+        return Promise.resolve(jsonResponse({ reels: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/other_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/other_film/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'DELETE' && path === '/api/filesystem/films/existing_film') {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Existing Film' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete film' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await screen.findByText('Film "Existing Film" deleted successfully.');
+
+    const deleteCall = fetchMock.mock.calls.find(
+      ([url, requestInit]) => String(url) === '/api/filesystem/films/existing_film' && requestInit?.method === 'DELETE',
+    );
+
+    expect(deleteCall).toBeDefined();
+    expect(await screen.findByRole('button', { name: 'Other Film' })).toBeInTheDocument();
   }, 10000);
 
   it('starts sequence extraction, polls job status, and selects the generated reel', async () => {

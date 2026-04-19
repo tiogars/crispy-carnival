@@ -30,6 +30,11 @@ export type UploadWitnessVideoResponse = {
   fileSizeBytes: number;
 };
 
+export type UploadReelVideoResponse = {
+  reel: Reel;
+  sourceVideoName: string;
+};
+
 export type WitnessVideosResponse = {
   videos: UploadWitnessVideoResponse[];
 };

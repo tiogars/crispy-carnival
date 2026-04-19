@@ -143,6 +143,7 @@ sort gives the correct playback order.
 | `GET` | `/health` | Health check — returns `{"status":"ok"}`. |
 | `GET` | `/api/filesystem/films` | List all films. |
 | `POST` | `/api/filesystem/films` | Create a new film directory. |
+| `DELETE` | `/api/filesystem/films/{film_id}` | Delete a film directory. |
 | `GET` | `/api/filesystem/films/{film_id}/reels` | List reels for a film. |
 | `GET` | `/api/filesystem/films/{film_id}/reels/{reel_id}/frames` | List frame URLs for a reel. |
 | `GET` | `/api/filesystem/films/{film_id}/witness-videos` | List witness videos for a film. |
