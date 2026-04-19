@@ -27,6 +27,7 @@ export type CreateFilmResponse = {
 export type UploadWitnessVideoResponse = {
   fileName: string;
   mediaUrl: string;
+  fileSizeBytes: number;
 };
 
 export type WitnessVideosResponse = {

@@ -67,6 +67,7 @@ class CreateFilmResponse(BaseModel):
 class UploadWitnessVideoResponse(BaseModel):
     fileName: str
     mediaUrl: str
+    fileSizeBytes: int
 
 
 class WitnessVideosResponse(BaseModel):
@@ -749,6 +750,7 @@ def upload_witness_video(
     return UploadWitnessVideoResponse(
         fileName=file_name,
         mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
+        fileSizeBytes=target_path.stat().st_size,
     )
 
 
@@ -770,6 +772,7 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
         UploadWitnessVideoResponse(
             fileName=file_name,
             mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
+            fileSizeBytes=(witness_videos_path / file_name).stat().st_size,
         )
         for file_name in _list_video_filenames(witness_videos_path)
     ]
