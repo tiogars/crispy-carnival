@@ -266,7 +266,7 @@ describe('App create film modal', () => {
     await user.upload(screen.getByTestId('witness-video-input'), file);
     await user.click(screen.getByRole('button', { name: 'Upload' }));
 
-    await screen.findByText('Witness video "witness.mp4" uploaded successfully.');
+    await screen.findByText('Witness video "witness.mp4" uploaded. Use the Extract sequence action in the toolbar when ready.');
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Upload witness video' })).toBeNull();
     });
@@ -362,7 +362,7 @@ describe('App create film modal', () => {
     await user.type(within(uploadDialog).getByLabelText('Reel name (optional)'), 'Imported Reel');
     await user.click(within(uploadDialog).getByRole('button', { name: 'Upload video' }));
 
-    await screen.findByText('Video "reel-source.mp4" imported as reel "imported_reel".');
+    await screen.findByText('Video "reel-source.mp4" uploaded as reel "imported_reel". Use the Extract sequence action in the toolbar when ready.');
     await screen.findByText('imported_reel');
 
     await waitFor(() => {
@@ -726,5 +726,105 @@ describe('App create film modal', () => {
     await screen.findByText((content) =>
       content.includes('Elapsed: 8s') && content.includes('Remaining: 0s') && content.includes('Speed: 12.5%/s'),
     );
+  }, 20000);
+
+  it('shows uploaded file, sequences, and frames under a reel tree item', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path = String(input);
+      const method = init?.method ?? 'GET';
+
+      if (method === 'GET' && path === '/api/filesystem/films') {
+        return Promise.resolve(
+          jsonResponse({
+            films: [{ id: 'existing_film', displayName: 'Existing Film' }],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels') {
+        return Promise.resolve(
+          jsonResponse({
+            reels: [
+              {
+                id: 'source_reel',
+                frameCount: 2,
+                sourceVideoName: 'source-reel.mp4',
+                sourceVideoUrl: '/media/existing_film/_reels/source_reel/source-reel.mp4',
+              },
+              {
+                id: 'source_reel_auto',
+                frameCount: 1,
+                sourceVideoName: null,
+                sourceVideoUrl: null,
+              },
+            ],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels/source_reel/sequences') {
+        return Promise.resolve(
+          jsonResponse({
+            reels: [
+              {
+                id: 'source_reel_auto',
+                frameCount: 1,
+                sourceVideoName: null,
+                sourceVideoUrl: null,
+              },
+            ],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/witness-videos') {
+        return Promise.resolve(jsonResponse({ videos: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/sequence-extraction-jobs') {
+        return Promise.resolve(jsonResponse({ jobs: [] }));
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels/source_reel/frames') {
+        return Promise.resolve(
+          jsonResponse({
+            reelId: 'source_reel',
+            frames: ['/media/existing_film/_reels/source_reel/frames/frame00001.jpg'],
+          }),
+        );
+      }
+
+      if (method === 'GET' && path === '/api/filesystem/films/existing_film/reels/source_reel_auto/frames') {
+        return Promise.resolve(
+          jsonResponse({
+            reelId: 'source_reel_auto',
+            frames: ['/media/existing_film/_reels/source_reel_auto/frames/frame00001.jpg'],
+          }),
+        );
+      }
+
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+
+    render(<App />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Existing Film' }));
+    await user.click(await screen.findByRole('button', { name: 'Reels' }));
+    await user.click(await screen.findByRole('button', { name: 'source_reel (2f)' }));
+
+    await screen.findByRole('button', { name: 'Uploaded file: source-reel.mp4' });
+    const sequencesButton = await screen.findByRole('button', { name: 'Sequences found from file' });
+    await screen.findByRole('button', { name: 'Frames (all frames from the film)' });
+
+    await user.click(sequencesButton);
+    const sequenceReelButtons = await screen.findAllByRole('button', { name: 'source_reel_auto (1f)' });
+
+    expect(sequenceReelButtons).toHaveLength(2);
+
+    await user.click(sequenceReelButtons[sequenceReelButtons.length - 1]);
+
+    await screen.findByRole('heading', { name: 'source_reel_auto' });
   }, 20000);
 });

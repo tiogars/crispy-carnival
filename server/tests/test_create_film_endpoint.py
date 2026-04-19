@@ -29,13 +29,7 @@ def test_create_film_returns_exact_500_payload_on_unexpected_error(monkeypatch, 
 
 def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
-    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
-
-    def fake_import(_video_path: Path, output_dir: Path) -> None:
-        (output_dir / 'frame00001.jpg').write_bytes(b'1')
-        (output_dir / 'frame00002.jpg').write_bytes(b'2')
-
-    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
+    monkeypatch.setattr(main, '_get_media_frame_count', lambda _video_path: 240)
 
     film_path = tmp_path / 'test_film'
     film_path.mkdir(parents=True, exist_ok=True)
@@ -48,13 +42,14 @@ def test_upload_witness_video_creates_file_in_dedicated_film_subfolder(monkeypat
     assert response.status_code == 201
     assert response.json() == {
         'fileName': 'witness.mp4',
-        'mediaUrl': '/media/test_film/_witness_videos/witness.mp4',
+        'mediaUrl': '/media/test_film/_witness_videos/witness/witness.mp4',
         'fileSizeBytes': 11,
-        'frameCount': 2,
+        'frameCount': 240,
     }
-    assert (film_path / '_witness_videos' / 'witness.mp4').read_bytes() == b'video-bytes'
-    assert (film_path / '_witness_videos' / 'witness_mp4_frames' / 'frame00001.jpg').exists()
-    assert (film_path / '_witness_videos' / 'witness_mp4_frames' / 'frame00002.jpg').exists()
+    assert (film_path / '_witness_videos' / 'witness' / 'witness.mp4').read_bytes() == b'video-bytes'
+    assert (film_path / '_witness_videos' / 'witness' / 'frames').exists()
+    assert not (film_path / '_witness_videos' / 'witness' / 'frames' / 'frame00001.jpg').exists()
+    assert (film_path / '_witness_videos' / 'witness' / 'sequences').exists()
 
 
 def test_delete_film_removes_film_directory(monkeypatch, tmp_path: Path):
@@ -92,15 +87,9 @@ def test_upload_witness_video_returns_404_when_film_does_not_exist(monkeypatch, 
 
 def test_upload_witness_video_overwrites_existing_file_when_flag_is_true(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
-    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
 
-    def fake_import(_video_path: Path, output_dir: Path) -> None:
-        (output_dir / 'frame00001.jpg').write_bytes(b'new-frame')
-
-    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
-
-    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
-    witness_frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness_mp4_frames'
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'witness.mp4'
+    witness_frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'frames'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'old-bytes')
     witness_frames_path.mkdir(parents=True, exist_ok=True)
@@ -114,12 +103,13 @@ def test_upload_witness_video_overwrites_existing_file_when_flag_is_true(monkeyp
 
     assert response.status_code == 201
     assert video_path.read_bytes() == b'new-bytes'
-    assert (witness_frames_path / 'frame00001.jpg').read_bytes() == b'new-frame'
+    assert not (witness_frames_path / 'frame00001.jpg').exists()
 
 
-def test_upload_witness_video_returns_503_for_mp4_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
+def test_upload_witness_video_does_not_require_ffmpeg_for_mp4(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
+    monkeypatch.setattr(main, '_get_media_frame_count', lambda _video_path: None)
     film_path = tmp_path / 'test_film'
     film_path.mkdir(parents=True, exist_ok=True)
 
@@ -128,8 +118,8 @@ def test_upload_witness_video_returns_503_for_mp4_when_ffmpeg_is_missing(monkeyp
         files={'file': ('witness.mp4', b'video-bytes', 'video/mp4')},
     )
 
-    assert response.status_code == 503
-    assert response.json() == {'detail': 'FFmpeg is required to import witness MP4 videos.'}
+    assert response.status_code == 201
+    assert response.json()['frameCount'] is None
 
 
 def test_upload_witness_video_does_not_require_ffmpeg_for_non_mp4(monkeypatch, tmp_path: Path):
@@ -150,12 +140,13 @@ def test_upload_witness_video_does_not_require_ffmpeg_for_non_mp4(monkeypatch, t
 def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     witness_folder = tmp_path / 'test_film' / '_witness_videos'
-    witness_folder.mkdir(parents=True, exist_ok=True)
-    (witness_folder / 'b.mov').write_bytes(b'1')
-    (witness_folder / 'a.mp4').write_bytes(b'2')
-    (witness_folder / 'a_mp4_frames').mkdir(parents=True, exist_ok=True)
-    (witness_folder / 'a_mp4_frames' / 'frame00001.jpg').write_bytes(b'frame-1')
-    (witness_folder / 'a_mp4_frames' / 'frame00002.jpg').write_bytes(b'frame-2')
+    (witness_folder / 'a').mkdir(parents=True, exist_ok=True)
+    (witness_folder / 'b').mkdir(parents=True, exist_ok=True)
+    (witness_folder / 'a' / 'a.mp4').write_bytes(b'2')
+    (witness_folder / 'b' / 'b.mov').write_bytes(b'1')
+    (witness_folder / 'a' / 'frames').mkdir(parents=True, exist_ok=True)
+    (witness_folder / 'a' / 'frames' / 'frame00001.jpg').write_bytes(b'frame-1')
+    (witness_folder / 'a' / 'frames' / 'frame00002.jpg').write_bytes(b'frame-2')
     (witness_folder / 'ignore.txt').write_text('x')
 
     response = client.get('/api/filesystem/films/test_film/witness-videos')
@@ -163,16 +154,17 @@ def test_get_witness_videos_lists_video_media_urls(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert response.json() == {
         'videos': [
-            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a.mp4', 'fileSizeBytes': 1, 'frameCount': 2},
-            {'fileName': 'b.mov', 'mediaUrl': '/media/test_film/_witness_videos/b.mov', 'fileSizeBytes': 1, 'frameCount': None},
+            {'fileName': 'a.mp4', 'mediaUrl': '/media/test_film/_witness_videos/a/a.mp4', 'fileSizeBytes': 1, 'frameCount': 2},
+            {'fileName': 'b.mov', 'mediaUrl': '/media/test_film/_witness_videos/b/b.mov', 'fileSizeBytes': 1, 'frameCount': None},
         ]
     }
 
 
 def test_delete_witness_video_removes_selected_file(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
-    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
-    frames_path = tmp_path / 'test_film' / '_witness_videos' / 'witness_mp4_frames'
+    witness_folder_path = tmp_path / 'test_film' / '_witness_videos' / 'witness'
+    video_path = witness_folder_path / 'witness.mp4'
+    frames_path = witness_folder_path / 'frames'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'video-bytes')
     frames_path.mkdir(parents=True, exist_ok=True)
@@ -183,6 +175,7 @@ def test_delete_witness_video_removes_selected_file(monkeypatch, tmp_path: Path)
     assert response.status_code == 204
     assert not video_path.exists()
     assert not frames_path.exists()
+    assert not witness_folder_path.exists()
 
 
 def test_delete_witness_video_returns_404_when_missing(monkeypatch, tmp_path: Path):
@@ -200,8 +193,9 @@ def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     film_path = tmp_path / 'test_film'
     (film_path / '_witness_videos').mkdir(parents=True, exist_ok=True)
-    (film_path / 'reel_001').mkdir(parents=True, exist_ok=True)
-    (film_path / 'reel_001' / 'frame0001.jpg').write_bytes(b'x')
+    (film_path / '_reels' / 'reel_001' / 'frames').mkdir(parents=True, exist_ok=True)
+    (film_path / '_reels' / 'reel_001' / 'frames' / 'frame0001.jpg').write_bytes(b'x')
+    (film_path / '_reels' / 'reel_001' / 'reel_001.mov').write_bytes(b'video')
 
     response = client.get('/api/filesystem/films/test_film/reels')
 
@@ -211,6 +205,57 @@ def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
             {
                 'id': 'reel_001',
                 'frameCount': 1,
+                'sourceVideoName': 'reel_001.mov',
+                'sourceVideoUrl': '/media/test_film/_reels/reel_001/reel_001.mov',
+            }
+        ]
+    }
+
+
+def test_get_reel_sequences_returns_reels_generated_from_source_reel_video(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
+    reels_root = tmp_path / 'test_film' / '_reels'
+
+    source_reel_path = reels_root / 'source_reel'
+    (source_reel_path / 'frames').mkdir(parents=True, exist_ok=True)
+    (source_reel_path / 'source-reel.mp4').write_bytes(b'video')
+
+    matching_sequence_path = reels_root / 'source_reel_auto'
+    (matching_sequence_path / 'frames').mkdir(parents=True, exist_ok=True)
+    (matching_sequence_path / 'frames' / 'frame00001.jpg').write_bytes(b'frame')
+    (matching_sequence_path / 'frames' / main.EXTRACTION_METADATA_FILENAME).write_text(
+        main.json_dumps(
+            {
+                'witnessVideoName': 'source-reel.mp4',
+                'outputReelId': 'source_reel_auto',
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    other_sequence_path = reels_root / 'other_sequence'
+    (other_sequence_path / 'frames').mkdir(parents=True, exist_ok=True)
+    (other_sequence_path / 'frames' / 'frame00001.jpg').write_bytes(b'frame')
+    (other_sequence_path / 'frames' / main.EXTRACTION_METADATA_FILENAME).write_text(
+        main.json_dumps(
+            {
+                'witnessVideoName': 'different-source.mp4',
+                'outputReelId': 'other_sequence',
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    response = client.get('/api/filesystem/films/test_film/reels/source_reel/sequences')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'reels': [
+            {
+                'id': 'source_reel_auto',
+                'frameCount': 1,
+                'sourceVideoName': None,
+                'sourceVideoUrl': None,
             }
         ]
     }
@@ -218,9 +263,9 @@ def test_get_reels_excludes_witness_video_folder(monkeypatch, tmp_path: Path):
 
 def test_delete_reel_removes_selected_reel_folder(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
-    reel_path = tmp_path / 'test_film' / 'reel_001'
-    reel_path.mkdir(parents=True, exist_ok=True)
-    (reel_path / 'frame0001.jpg').write_bytes(b'x')
+    reel_path = tmp_path / 'test_film' / '_reels' / 'reel_001'
+    (reel_path / 'frames').mkdir(parents=True, exist_ok=True)
+    (reel_path / 'frames' / 'frame0001.jpg').write_bytes(b'x')
 
     response = client.delete('/api/filesystem/films/test_film/reels/reel_001')
 
@@ -240,14 +285,6 @@ def test_delete_reel_returns_404_when_missing(monkeypatch, tmp_path: Path):
 
 def test_upload_reel_video_creates_reel_folder_from_uploaded_video(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
-    monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
-
-    def fake_import(video_path: Path, output_dir: Path) -> None:
-        assert video_path.exists()
-        (output_dir / 'frame00001.jpg').write_bytes(b'1')
-        (output_dir / 'frame00002.jpg').write_bytes(b'2')
-
-    monkeypatch.setattr(main, '_import_reel_video_frames', fake_import)
 
     film_path = tmp_path / 'test_film'
     film_path.mkdir(parents=True, exist_ok=True)
@@ -261,16 +298,19 @@ def test_upload_reel_video_creates_reel_folder_from_uploaded_video(monkeypatch, 
     assert response.json() == {
         'reel': {
             'id': 'reel_source',
-            'frameCount': 2,
+            'frameCount': 0,
+            'sourceVideoName': 'reel-source.mp4',
+            'sourceVideoUrl': '/media/test_film/_reels/reel_source/reel-source.mp4',
         },
         'sourceVideoName': 'reel-source.mp4',
     }
-    assert (film_path / 'reel_source' / 'frame00001.jpg').exists()
-    assert (film_path / 'reel_source' / 'frame00002.jpg').exists()
-    assert (film_path / 'reel_source' / '_source_video.mp4').read_bytes() == b'video-bytes'
+    assert (film_path / '_reels' / 'reel_source' / 'frames').exists()
+    assert not (film_path / '_reels' / 'reel_source' / 'frames' / 'frame00001.jpg').exists()
+    assert (film_path / '_reels' / 'reel_source' / 'reel-source.mp4').read_bytes() == b'video-bytes'
+    assert (film_path / '_reels' / 'reel_source' / 'sequences').exists()
 
 
-def test_upload_reel_video_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
+def test_upload_reel_video_does_not_require_ffmpeg(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
 
@@ -282,14 +322,14 @@ def test_upload_reel_video_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_p
         files={'file': ('reel-source.mp4', b'video-bytes', 'video/mp4')},
     )
 
-    assert response.status_code == 503
-    assert response.json() == {'detail': 'FFmpeg is required to import reel videos.'}
+    assert response.status_code == 201
+    assert response.json()['reel']['frameCount'] == 0
 
 
 def test_start_sequence_extraction_returns_503_when_ffmpeg_is_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: False)
-    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'witness.mp4'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'video-bytes')
 
@@ -309,10 +349,10 @@ def test_start_sequence_extraction_returns_503_when_ffmpeg_is_missing(monkeypatc
 def test_start_sequence_extraction_returns_409_when_output_reel_exists(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main, 'FILM_LIBRARY_ROOT', tmp_path)
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
-    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'witness.mp4'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'video-bytes')
-    existing_reel_path = tmp_path / 'test_film' / '_witness_videos' / 'custom_reel'
+    existing_reel_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'sequences' / 'custom_reel'
     existing_reel_path.mkdir(parents=True, exist_ok=True)
 
     response = client.post(
@@ -334,7 +374,7 @@ def test_start_sequence_extraction_creates_reel_and_job_status(monkeypatch, tmp_
     main.SEQUENCE_EXTRACTION_JOBS.clear()
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
     monkeypatch.setattr(main, '_get_media_duration_seconds', lambda _video_path: 12.0)
-    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness.mp4'
+    video_path = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'witness.mp4'
     video_path.parent.mkdir(parents=True, exist_ok=True)
     video_path.write_bytes(b'video-bytes')
 
@@ -403,7 +443,7 @@ def test_start_sequence_extraction_creates_reel_and_job_status(monkeypatch, tmp_
     assert payload['progressRatePercentPerSecond'] is not None
     assert payload['progressRatePercentPerSecond'] > 0
 
-    output_dir = tmp_path / 'test_film' / '_witness_videos' / 'witness_auto'
+    output_dir = tmp_path / 'test_film' / '_witness_videos' / 'witness' / 'sequences' / 'witness_auto'
     assert (output_dir / 'frame00001.jpg').read_bytes() == b'frame-1'
     assert (output_dir / 'frame00002.jpg').read_bytes() == b'frame-2'
     metadata = (output_dir / main.EXTRACTION_METADATA_FILENAME).read_text(encoding='utf-8')
@@ -417,9 +457,9 @@ def test_start_reel_sequence_extraction_creates_reel_and_job_status(monkeypatch,
     monkeypatch.setattr(main, '_ffmpeg_is_available', lambda: True)
     monkeypatch.setattr(main, '_get_media_duration_seconds', lambda _video_path: 14.0)
 
-    reel_path = tmp_path / 'test_film' / 'source_reel'
+    reel_path = tmp_path / 'test_film' / '_reels' / 'source_reel'
     reel_path.mkdir(parents=True, exist_ok=True)
-    (reel_path / '_source_video.mp4').write_bytes(b'reel-video-bytes')
+    (reel_path / 'source-reel.mp4').write_bytes(b'reel-video-bytes')
 
     def fake_execute_sequence_extraction_command(job_id: str, command: list[str], duration_seconds: float | None):
         output_pattern = Path(command[-1])
@@ -456,7 +496,7 @@ def test_start_reel_sequence_extraction_creates_reel_and_job_status(monkeypatch,
     body = response.json()
     assert body['status'] == 'queued'
     assert body['filmId'] == 'test_film'
-    assert body['witnessVideoName'] == '_source_video.mp4'
+    assert body['witnessVideoName'] == 'source-reel.mp4'
     assert body['statusUrl'] == f"/api/sequence-extraction/jobs/{body['jobId']}"
 
     status_response = client.get(body['statusUrl'])
@@ -468,7 +508,7 @@ def test_start_reel_sequence_extraction_creates_reel_and_job_status(monkeypatch,
         'jobId': body['jobId'],
         'status': 'succeeded',
         'filmId': 'test_film',
-        'witnessVideoName': '_source_video.mp4',
+        'witnessVideoName': 'source-reel.mp4',
         'outputReelId': 'source_reel_auto',
         'progressPercent': 100,
         'progressRatePercentPerSecond': payload['progressRatePercentPerSecond'],
@@ -486,11 +526,11 @@ def test_start_reel_sequence_extraction_creates_reel_and_job_status(monkeypatch,
     assert payload['progressRatePercentPerSecond'] is not None
     assert payload['progressRatePercentPerSecond'] > 0
 
-    output_dir = tmp_path / 'test_film' / 'source_reel_auto'
+    output_dir = tmp_path / 'test_film' / '_reels' / 'source_reel_auto' / 'frames'
     assert (output_dir / 'frame00001.jpg').read_bytes() == b'frame-1'
     assert (output_dir / 'frame00002.jpg').read_bytes() == b'frame-2'
     metadata = (output_dir / main.EXTRACTION_METADATA_FILENAME).read_text(encoding='utf-8')
-    assert '"witnessVideoName": "_source_video.mp4"' in metadata
+    assert '"witnessVideoName": "source-reel.mp4"' in metadata
     assert '"outputReelId": "source_reel_auto"' in metadata
 
 

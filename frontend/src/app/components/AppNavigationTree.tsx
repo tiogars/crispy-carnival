@@ -1,8 +1,10 @@
 import { Box, Button, Collapse, Paper, Stack } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DescriptionIcon from '@mui/icons-material/Description';
 import HomeIcon from '@mui/icons-material/Home';
 import MovieIcon from '@mui/icons-material/Movie';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { useEffect, useState } from 'react';
@@ -12,6 +14,7 @@ import type { Film, NavigationNode, Reel, UploadWitnessVideoResponse } from '../
 type AppNavigationTreeProps = {
   films: Film[];
   reels: Record<string, Reel[]>;
+  reelSequences: Record<string, Record<string, Reel[]>>;
   witnessVideos: Record<string, UploadWitnessVideoResponse[]>;
   selectedNode: NavigationNode | '';
   onNodeSelect: (node: NavigationNode) => void;
@@ -78,6 +81,7 @@ const TreeItemButton = ({ nodeId, label, icon, isSelected, isBranchSelected, onS
 export const AppNavigationTree = ({
   films,
   reels,
+  reelSequences,
   witnessVideos,
   selectedNode,
   onNodeSelect,
@@ -140,20 +144,82 @@ export const AppNavigationTree = ({
               label="Reels"
               icon={<VideoLibraryIcon />}
               isSelected={selectedNode === `reels-${film.id}`}
-              isBranchSelected={selectedNode === `reels-${film.id}` || selectedNode.startsWith(`reel-${film.id}-`)}
+              isBranchSelected={
+                selectedNode === `reels-${film.id}` ||
+                selectedNode.startsWith(`reel-${film.id}-`) ||
+                selectedNode.startsWith(`reel-file-${film.id}::`) ||
+                selectedNode.startsWith(`reel-sequences-${film.id}::`) ||
+                selectedNode.startsWith(`reel-sequence-${film.id}::`) ||
+                selectedNode.startsWith(`reel-frames-${film.id}::`)
+              }
               onSelect={onNodeSelect}
               hasChildren={Boolean((reels[film.id]?.length ?? 0) > 0)}
             >
-              {(reels[film.id] ?? []).map((reel) => (
-                <TreeItemButton
-                  key={reel.id}
-                  nodeId={`reel-${film.id}-${reel.id}`}
-                  label={`${reel.id} (${reel.frameCount}f)`}
-                  icon={<PlayCircleIcon sx={{ fontSize: '1rem' }} />}
-                  isSelected={selectedNode === `reel-${film.id}-${reel.id}`}
-                  onSelect={onNodeSelect}
-                />
-              ))}
+              {(reels[film.id] ?? []).map((reel) => {
+                const reelFileNodeId = `reel-file-${film.id}::${reel.id}` as NavigationNode;
+                const reelSequencesNodeId = `reel-sequences-${film.id}::${reel.id}` as NavigationNode;
+                const reelFramesNodeId = `reel-frames-${film.id}::${reel.id}` as NavigationNode;
+                const matchingSequences = reelSequences[film.id]?.[reel.id] ?? [];
+
+                return (
+                  <TreeItemButton
+                    key={reel.id}
+                    nodeId={`reel-${film.id}-${reel.id}`}
+                    label={`${reel.id} (${reel.frameCount}f)`}
+                    icon={<PlayCircleIcon sx={{ fontSize: '1rem' }} />}
+                    isSelected={selectedNode === `reel-${film.id}-${reel.id}`}
+                    isBranchSelected={
+                      selectedNode === `reel-${film.id}-${reel.id}` ||
+                      selectedNode === reelFileNodeId ||
+                      selectedNode === reelSequencesNodeId ||
+                      selectedNode === reelFramesNodeId ||
+                      selectedNode.startsWith(`reel-sequence-${film.id}::${reel.id}::`)
+                    }
+                    onSelect={onNodeSelect}
+                    hasChildren
+                  >
+                    <TreeItemButton
+                      nodeId={reelFileNodeId}
+                      label={`Uploaded file: ${reel.sourceVideoName ?? 'Unavailable'}`}
+                      icon={<DescriptionIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === reelFileNodeId}
+                      onSelect={onNodeSelect}
+                    />
+
+                    <TreeItemButton
+                      nodeId={reelSequencesNodeId}
+                      label="Sequences found from file"
+                      icon={<VideoLibraryIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === reelSequencesNodeId}
+                      isBranchSelected={
+                        selectedNode === reelSequencesNodeId ||
+                        selectedNode.startsWith(`reel-sequence-${film.id}::${reel.id}::`)
+                      }
+                      onSelect={onNodeSelect}
+                      hasChildren={matchingSequences.length > 0}
+                    >
+                      {matchingSequences.map((sequenceReel) => (
+                        <TreeItemButton
+                          key={sequenceReel.id}
+                          nodeId={`reel-sequence-${film.id}::${reel.id}::${sequenceReel.id}` as NavigationNode}
+                          label={`${sequenceReel.id} (${sequenceReel.frameCount}f)`}
+                          icon={<PlayCircleIcon sx={{ fontSize: '1rem' }} />}
+                          isSelected={selectedNode === (`reel-sequence-${film.id}::${reel.id}::${sequenceReel.id}` as NavigationNode)}
+                          onSelect={onNodeSelect}
+                        />
+                      ))}
+                    </TreeItemButton>
+
+                    <TreeItemButton
+                      nodeId={reelFramesNodeId}
+                      label="Frames (all frames from the film)"
+                      icon={<PhotoLibraryIcon sx={{ fontSize: '1rem' }} />}
+                      isSelected={selectedNode === reelFramesNodeId}
+                      onSelect={onNodeSelect}
+                    />
+                  </TreeItemButton>
+                );
+              })}
             </TreeItemButton>
           </TreeItemButton>
         ))}

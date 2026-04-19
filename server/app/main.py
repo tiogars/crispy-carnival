@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import threading
 from datetime import UTC, datetime
+from json import JSONDecodeError, loads as json_loads
 from json import dumps as json_dumps
 from pathlib import Path
 from typing import Annotated
@@ -21,6 +22,9 @@ FILM_LIBRARY_ROOT = Path(os.getenv('FILM_LIBRARY_ROOT', str(BASE_DIR / 'data' / 
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'}
 VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'}
 WITNESS_VIDEOS_DIRNAME = '_witness_videos'
+REELS_DIRNAME = '_reels'
+FRAMES_DIRNAME = 'frames'
+SEQUENCES_DIRNAME = 'sequences'
 EXTRACTION_METADATA_FILENAME = '_sequence_extraction.json'
 REEL_SOURCE_VIDEO_PREFIX = '_source_video'
 JOB_STATUS_QUEUED = 'queued'
@@ -29,29 +33,75 @@ JOB_STATUS_SUCCEEDED = 'succeeded'
 JOB_STATUS_FAILED = 'failed'
 
 
-def _build_witness_frames_dir_name(file_name: str) -> str:
+def _build_media_entry_dir_name(file_name: str, fallback_name: str) -> str:
     stem = re.sub(r'[^a-zA-Z0-9]+', '_', Path(file_name).stem.lower()).strip('_')
 
     if not stem:
-        stem = 'witness'
+        stem = fallback_name
 
-    suffix = re.sub(r'[^a-zA-Z0-9]+', '_', Path(file_name).suffix.lower()).strip('_')
+    return stem
 
-    if not suffix:
-        suffix = 'video'
 
-    return f'{stem}_{suffix}_frames'
+def _get_witness_video_entry_path(witness_videos_path: Path, file_name: str) -> Path:
+    return _safe_join(witness_videos_path, _build_media_entry_dir_name(file_name, 'witness'))
 
 
 def _get_witness_frames_path(witness_videos_path: Path, file_name: str) -> Path:
-    return _safe_join(witness_videos_path, _build_witness_frames_dir_name(file_name))
+    return _safe_join(_get_witness_video_entry_path(witness_videos_path, file_name), FRAMES_DIRNAME)
+
+
+def _get_witness_sequences_path(witness_videos_path: Path, file_name: str) -> Path:
+    return _safe_join(_get_witness_video_entry_path(witness_videos_path, file_name), SEQUENCES_DIRNAME)
+
+
+def _get_reels_root_path(film_path: Path) -> Path:
+    return _safe_join(film_path, REELS_DIRNAME)
+
+
+def _get_reel_path(film_path: Path, reel_id: str) -> Path:
+    reels_root = _get_reels_root_path(film_path)
+    return _safe_join(reels_root, reel_id)
+
+
+def _get_reel_frames_path(reel_path: Path) -> Path:
+    return _safe_join(reel_path, FRAMES_DIRNAME)
+
+
+def _get_reel_sequences_path(reel_path: Path) -> Path:
+    return _safe_join(reel_path, SEQUENCES_DIRNAME)
+
+
+def _find_video_file_in_folder(folder: Path) -> Path | None:
+    candidates = [
+        child
+        for child in folder.iterdir()
+        if child.is_file() and child.suffix.lower() in VIDEO_SUFFIXES
+    ]
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda path: path.name.lower())
+    return candidates[0]
+
+
+def _find_legacy_witness_video_path(witness_videos_path: Path, file_name: str) -> Path:
+    return _safe_join(witness_videos_path, Path(file_name).name)
 
 
 def _get_witness_frame_count(witness_videos_path: Path, file_name: str) -> int | None:
     frames_path = _get_witness_frames_path(witness_videos_path, file_name)
 
     if not frames_path.exists() or not frames_path.is_dir():
-        return None
+        legacy_frames_path = _safe_join(
+            witness_videos_path,
+            f"{_build_media_entry_dir_name(file_name, 'witness')}_{Path(file_name).suffix.lower().strip('.') or 'video'}_frames",
+        )
+
+        if not legacy_frames_path.exists() or not legacy_frames_path.is_dir():
+            return None
+
+        return _count_image_files(legacy_frames_path)
 
     return _count_image_files(frames_path)
 
@@ -68,6 +118,8 @@ class FilmItem(BaseModel):
 class ReelItem(BaseModel):
     id: str
     frameCount: int
+    sourceVideoName: str | None = None
+    sourceVideoUrl: str | None = None
 
 
 class FilmsResponse(BaseModel):
@@ -176,6 +228,12 @@ def _safe_join(root: Path, fragment: str) -> Path:
     return candidate
 
 
+def _build_media_url(film_id: str, film_path: Path, file_path: Path) -> str:
+    relative_parts = file_path.relative_to(film_path).parts
+    encoded_parts = '/'.join(quote(part) for part in relative_parts)
+    return f'/media/{quote(film_id)}/{encoded_parts}'
+
+
 def _list_image_filenames(folder: Path) -> list[str]:
     # Use os.scandir to avoid Path object allocations and os.path.splitext to
     # avoid Path() construction per entry – critical for reels with 100k+ frames.
@@ -267,33 +325,66 @@ def _get_film_path_or_404(film_id: str) -> Path:
 def _get_witness_video_path_or_404(film_id: str, file_name: str) -> tuple[Path, Path]:
     film_path = _get_film_path_or_404(film_id)
     witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
-    video_path = _safe_join(witness_videos_path, Path(file_name).name)
+
+    entry_path = _get_witness_video_entry_path(witness_videos_path, file_name)
+    video_path = _safe_join(entry_path, Path(file_name).name)
 
     if not video_path.exists() or not video_path.is_file():
+        legacy_video_path = _find_legacy_witness_video_path(witness_videos_path, file_name)
+
+        if legacy_video_path.exists() and legacy_video_path.is_file():
+            return film_path, legacy_video_path
+
         raise HTTPException(status_code=404, detail='Witness video not found.')
 
     return film_path, video_path
 
 
 def _find_reel_source_video_path(reel_path: Path) -> Path | None:
-    candidates = [
-        child
-        for child in reel_path.iterdir()
-        if child.is_file()
-        and child.stem == REEL_SOURCE_VIDEO_PREFIX
-        and child.suffix.lower() in VIDEO_SUFFIXES
-    ]
+    source_video_path = _find_video_file_in_folder(reel_path)
 
-    if not candidates:
+    if source_video_path is not None:
+        return source_video_path
+
+    for child in reel_path.iterdir():
+        if not child.is_dir() or child.name in {FRAMES_DIRNAME, SEQUENCES_DIRNAME}:
+            continue
+
+        nested_source_video = _find_video_file_in_folder(child)
+
+        if nested_source_video is not None:
+            return nested_source_video
+
+    return None
+
+
+def _read_sequence_extraction_metadata(output_dir: Path) -> dict[str, object] | None:
+    metadata_path = output_dir / EXTRACTION_METADATA_FILENAME
+
+    if not metadata_path.exists() or not metadata_path.is_file():
         return None
 
-    candidates.sort(key=lambda path: path.name.lower())
-    return candidates[0]
+    try:
+        return json_loads(metadata_path.read_text(encoding='utf-8'))
+    except (OSError, JSONDecodeError):
+        return None
+
+
+def _build_reel_item(film_id: str, film_path: Path, reel_path: Path) -> ReelItem:
+    source_video_path = _find_reel_source_video_path(reel_path)
+    frames_path = _get_reel_frames_path(reel_path)
+
+    return ReelItem(
+        id=reel_path.name,
+        frameCount=_count_image_files(frames_path) if frames_path.exists() else 0,
+        sourceVideoName=source_video_path.name if source_video_path is not None else None,
+        sourceVideoUrl=_build_media_url(film_id, film_path, source_video_path) if source_video_path is not None else None,
+    )
 
 
 def _get_reel_source_video_path_or_404(film_id: str, reel_id: str) -> tuple[Path, Path]:
     film_path = _get_film_path_or_404(film_id)
-    reel_path = _safe_join(film_path, reel_id)
+    reel_path = _get_reel_path(film_path, reel_id)
 
     if not reel_path.exists() or not reel_path.is_dir():
         raise HTTPException(status_code=404, detail='Reel not found.')
@@ -311,6 +402,12 @@ def _remove_witness_frames_if_present(film_id: str, file_name: str) -> None:
     witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
 
     if not witness_videos_path.exists() or not witness_videos_path.is_dir():
+        return
+
+    witness_entry_path = _get_witness_video_entry_path(witness_videos_path, file_name)
+
+    if witness_entry_path.exists() and witness_entry_path.is_dir():
+        shutil.rmtree(witness_entry_path, ignore_errors=True)
         return
 
     frames_path = _get_witness_frames_path(witness_videos_path, file_name)
@@ -885,6 +982,8 @@ def create_film(payload: CreateFilmRequest) -> CreateFilmResponse:
             raise HTTPException(status_code=409, detail='A film with this name already exists.')
 
         film_path.mkdir(parents=False, exist_ok=False)
+        _get_reels_root_path(film_path).mkdir(parents=False, exist_ok=True)
+        _safe_join(film_path, WITNESS_VIDEOS_DIRNAME).mkdir(parents=False, exist_ok=True)
 
         if payload.firstReelName:
             try:
@@ -892,8 +991,10 @@ def create_film(payload: CreateFilmRequest) -> CreateFilmResponse:
             except ValueError as error:
                 raise HTTPException(status_code=400, detail=str(error)) from error
 
-            reel_path = _safe_join(film_path, reel_id)
+            reel_path = _get_reel_path(film_path, reel_id)
             reel_path.mkdir(parents=False, exist_ok=False)
+            _get_reel_frames_path(reel_path).mkdir(parents=False, exist_ok=True)
+            _get_reel_sequences_path(reel_path).mkdir(parents=False, exist_ok=True)
 
         return CreateFilmResponse(
             film=FilmItem(id=film_id, displayName=_format_film_display_name(film_id))
@@ -924,18 +1025,49 @@ def delete_film(film_id: str) -> None:
 )
 def get_reels(film_id: str) -> ReelsResponse:
     film_path = _get_film_path_or_404(film_id)
+    reels_root = _get_reels_root_path(film_path)
+
+    if not reels_root.exists() or not reels_root.is_dir():
+        return ReelsResponse(reels=[])
 
     reels = sorted(
-        [child for child in film_path.iterdir() if child.is_dir() and child.name != WITNESS_VIDEOS_DIRNAME],
+        [child for child in reels_root.iterdir() if child.is_dir()],
         key=lambda path: path.name.lower(),
     )
 
-    response = [
-        ReelItem(id=reel.name, frameCount=_count_image_files(reel))
-        for reel in reels
-    ]
+    return ReelsResponse(reels=[_build_reel_item(film_id, film_path, reel) for reel in reels])
 
-    return ReelsResponse(reels=response)
+
+@app.get(
+    '/api/filesystem/films/{film_id}/reels/{reel_id}/sequences',
+    responses={
+        404: {'description': 'Film or reel not found.'},
+    },
+)
+def get_reel_sequences(film_id: str, reel_id: str) -> ReelsResponse:
+    film_path, source_video_path = _get_reel_source_video_path_or_404(film_id, reel_id)
+    reels_root = _get_reels_root_path(film_path)
+
+    if not reels_root.exists() or not reels_root.is_dir():
+        return ReelsResponse(reels=[])
+
+    sequence_reels = []
+
+    for candidate in sorted(
+        [child for child in reels_root.iterdir() if child.is_dir() and child.name != reel_id],
+        key=lambda path: path.name.lower(),
+    ):
+        metadata = _read_sequence_extraction_metadata(_get_reel_frames_path(candidate))
+
+        if metadata is None:
+            continue
+
+        if metadata.get('witnessVideoName') != source_video_path.name:
+            continue
+
+        sequence_reels.append(_build_reel_item(film_id, film_path, candidate))
+
+    return ReelsResponse(reels=sequence_reels)
 
 
 @app.delete(
@@ -947,9 +1079,9 @@ def get_reels(film_id: str) -> ReelsResponse:
 )
 def delete_reel(film_id: str, reel_id: str) -> None:
     film_path = _get_film_path_or_404(film_id)
-    reel_path = _safe_join(film_path, reel_id)
+    reel_path = _get_reel_path(film_path, reel_id)
 
-    if not reel_path.exists() or not reel_path.is_dir() or reel_path.name == WITNESS_VIDEOS_DIRNAME:
+    if not reel_path.exists() or not reel_path.is_dir():
         raise HTTPException(status_code=404, detail='Reel not found.')
 
     shutil.rmtree(reel_path)
@@ -964,15 +1096,20 @@ def delete_reel(film_id: str, reel_id: str) -> None:
 def get_reel_frames(film_id: str, reel_id: str) -> FramesResponse:
     film_path = _get_film_path_or_404(film_id)
 
-    reel_path = _safe_join(film_path, reel_id)
+    reel_path = _get_reel_path(film_path, reel_id)
 
     if not reel_path.exists() or not reel_path.is_dir():
         raise HTTPException(status_code=404, detail='Reel not found.')
 
-    image_names = _list_image_filenames(reel_path)
+    frames_path = _get_reel_frames_path(reel_path)
+
+    if not frames_path.exists() or not frames_path.is_dir():
+        image_names = []
+    else:
+        image_names = _list_image_filenames(frames_path)
 
     frames = [
-        f'/media/{quote(film_id)}/{quote(reel_id)}/{quote(name)}'
+        f'/media/{quote(film_id)}/{quote(REELS_DIRNAME)}/{quote(reel_id)}/{quote(FRAMES_DIRNAME)}/{quote(name)}'
         for name in image_names
     ]
 
@@ -987,7 +1124,6 @@ def get_reel_frames(film_id: str, reel_id: str) -> FramesResponse:
         404: {'description': 'Film not found.'},
         409: {'description': 'A reel with this name already exists.'},
         500: {'description': 'Error during reel video upload.'},
-        503: {'description': 'FFmpeg is required to import reel videos.'},
     },
 )
 def upload_reel_video(
@@ -996,9 +1132,6 @@ def upload_reel_video(
     overwrite: Annotated[bool, Form()] = False,
     reel_name: Annotated[str | None, Form()] = None,
 ) -> UploadReelVideoResponse:
-    if not _ffmpeg_is_available():
-        raise HTTPException(status_code=503, detail='FFmpeg is required to import reel videos.')
-
     film_path = _get_film_path_or_404(film_id)
 
     file_name = Path(file.filename or '').name
@@ -1011,10 +1144,12 @@ def upload_reel_video(
     except ValueError as error:
         raise HTTPException(status_code=400, detail='Reel name must contain letters or numbers.') from error
 
-    if reel_id == WITNESS_VIDEOS_DIRNAME:
+    if reel_id in {WITNESS_VIDEOS_DIRNAME, REELS_DIRNAME}:
         raise HTTPException(status_code=400, detail='Reel name is reserved.')
 
-    target_path = _safe_join(film_path, reel_id)
+    reels_root = _get_reels_root_path(film_path)
+    reels_root.mkdir(parents=False, exist_ok=True)
+    target_path = _get_reel_path(film_path, reel_id)
 
     if target_path.exists():
         if not overwrite:
@@ -1027,19 +1162,18 @@ def upload_reel_video(
 
     target_path.mkdir(parents=False, exist_ok=False)
 
-    source_video_path = target_path / f'{REEL_SOURCE_VIDEO_PREFIX}{Path(file_name).suffix.lower()}'
+    source_video_path = target_path / file_name
     temp_video_path = target_path / f'_upload_{uuid4().hex}{Path(file_name).suffix}'
+    frames_path = _get_reel_frames_path(target_path)
+    sequences_path = _get_reel_sequences_path(target_path)
 
     try:
         with temp_video_path.open('wb') as output_stream:
             shutil.copyfileobj(file.file, output_stream)
 
         shutil.copy2(temp_video_path, source_video_path)
-        _import_reel_video_frames(source_video_path, target_path)
-        frame_count = _count_image_files(target_path)
-
-        if frame_count == 0:
-            raise RuntimeError('No frames were generated from the uploaded video.')
+        frames_path.mkdir(parents=False, exist_ok=True)
+        sequences_path.mkdir(parents=False, exist_ok=True)
     except HTTPException:
         raise
     except Exception as error:
@@ -1052,7 +1186,12 @@ def upload_reel_video(
             temp_video_path.unlink()
 
     return UploadReelVideoResponse(
-        reel=ReelItem(id=reel_id, frameCount=frame_count),
+        reel=ReelItem(
+            id=reel_id,
+            frameCount=0,
+            sourceVideoName=file_name,
+            sourceVideoUrl=_build_media_url(film_id, film_path, source_video_path),
+        ),
         sourceVideoName=file_name,
     )
 
@@ -1065,7 +1204,6 @@ def upload_reel_video(
         404: {'description': 'Film not found.'},
         409: {'description': 'A witness video with this name already exists.'},
         500: {'description': 'Error during witness video upload.'},
-        503: {'description': 'FFmpeg is required to import witness MP4 videos.'},
     },
 )
 def upload_witness_video(
@@ -1083,50 +1221,36 @@ def upload_witness_video(
     witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
     witness_videos_path.mkdir(parents=False, exist_ok=True)
 
-    target_path = _safe_join(witness_videos_path, file_name)
+    witness_entry_path = _get_witness_video_entry_path(witness_videos_path, file_name)
+    target_path = _safe_join(witness_entry_path, file_name)
     frames_path = _get_witness_frames_path(witness_videos_path, file_name)
-    should_extract_frames = Path(file_name).suffix.lower() == '.mp4'
+    sequences_path = _get_witness_sequences_path(witness_videos_path, file_name)
 
-    if should_extract_frames and not _ffmpeg_is_available():
-        raise HTTPException(status_code=503, detail='FFmpeg is required to import witness MP4 videos.')
-
-    if target_path.exists() and not overwrite:
+    if witness_entry_path.exists() and not overwrite:
         raise HTTPException(status_code=409, detail='A witness video with this name already exists.')
 
-    if overwrite and frames_path.exists() and frames_path.is_dir():
-        shutil.rmtree(frames_path, ignore_errors=True)
-
-    extracted_frame_count: int | None = None
+    if overwrite and witness_entry_path.exists() and witness_entry_path.is_dir():
+        shutil.rmtree(witness_entry_path, ignore_errors=True)
 
     try:
+        witness_entry_path.mkdir(parents=False, exist_ok=True)
+        frames_path.mkdir(parents=False, exist_ok=True)
+        sequences_path.mkdir(parents=False, exist_ok=True)
+
         with target_path.open('wb') as output_stream:
             shutil.copyfileobj(file.file, output_stream)
-
-        if should_extract_frames:
-            if frames_path.exists():
-                if frames_path.is_dir():
-                    shutil.rmtree(frames_path, ignore_errors=True)
-                else:
-                    frames_path.unlink()
-
-            frames_path.mkdir(parents=False, exist_ok=False)
-            _import_reel_video_frames(target_path, frames_path)
-            extracted_frame_count = _count_image_files(frames_path)
-
-            if extracted_frame_count == 0:
-                raise RuntimeError('No frames were generated from the uploaded witness video.')
     except Exception as error:
-        if should_extract_frames and frames_path.exists() and frames_path.is_dir():
-            shutil.rmtree(frames_path, ignore_errors=True)
+        if witness_entry_path.exists() and witness_entry_path.is_dir():
+            shutil.rmtree(witness_entry_path, ignore_errors=True)
         raise HTTPException(status_code=500, detail='Error during witness video upload.') from error
     finally:
         file.file.close()
 
     return UploadWitnessVideoResponse(
         fileName=file_name,
-        mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
+        mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(witness_entry_path.name)}/{quote(file_name)}',
         fileSizeBytes=target_path.stat().st_size,
-        frameCount=extracted_frame_count if extracted_frame_count is not None else _get_media_frame_count(target_path),
+        frameCount=_get_media_frame_count(target_path),
     )
 
 
@@ -1144,15 +1268,34 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
     if not witness_videos_path.exists() or not witness_videos_path.is_dir():
         return WitnessVideosResponse(videos=[])
 
-    videos = [
-        UploadWitnessVideoResponse(
-            fileName=file_name,
-            mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(file_name)}',
-            fileSizeBytes=(witness_videos_path / file_name).stat().st_size,
-            frameCount=_get_witness_frame_count(witness_videos_path, file_name),
-        )
-        for file_name in _list_video_filenames(witness_videos_path)
-    ]
+    videos: list[UploadWitnessVideoResponse] = []
+
+    for child in sorted(witness_videos_path.iterdir(), key=lambda path: path.name.lower()):
+        if child.is_dir():
+            video_path = _find_video_file_in_folder(child)
+
+            if video_path is None:
+                continue
+
+            videos.append(
+                UploadWitnessVideoResponse(
+                    fileName=video_path.name,
+                    mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(child.name)}/{quote(video_path.name)}',
+                    fileSizeBytes=video_path.stat().st_size,
+                    frameCount=_get_witness_frame_count(witness_videos_path, video_path.name),
+                )
+            )
+            continue
+
+        if child.is_file() and child.suffix.lower() in VIDEO_SUFFIXES:
+            videos.append(
+                UploadWitnessVideoResponse(
+                    fileName=child.name,
+                    mediaUrl=f'/media/{quote(film_id)}/{quote(WITNESS_VIDEOS_DIRNAME)}/{quote(child.name)}',
+                    fileSizeBytes=child.stat().st_size,
+                    frameCount=_get_witness_frame_count(witness_videos_path, child.name),
+                )
+            )
 
     return WitnessVideosResponse(videos=videos)
 
@@ -1167,7 +1310,11 @@ def get_witness_videos(film_id: str) -> WitnessVideosResponse:
 def delete_witness_video(film_id: str, file_name: str) -> None:
     _, video_path = _get_witness_video_path_or_404(film_id, file_name)
 
-    video_path.unlink()
+    if video_path.parent.name in {WITNESS_VIDEOS_DIRNAME, ''}:
+        video_path.unlink()
+    else:
+        shutil.rmtree(video_path.parent, ignore_errors=True)
+
     _remove_witness_frames_if_present(film_id, file_name)
 
 
@@ -1193,9 +1340,10 @@ def start_sequence_extraction(
         raise HTTPException(status_code=503, detail='FFmpeg is not available in the server runtime environment.')
 
     film_path, video_path = _get_witness_video_path_or_404(film_id, file_name)
-    witness_videos_path = _safe_join(film_path, WITNESS_VIDEOS_DIRNAME)
+    witness_sequences_path = _safe_join(video_path.parent, SEQUENCES_DIRNAME)
+    witness_sequences_path.mkdir(parents=False, exist_ok=True)
     output_reel_id = _build_output_reel_id(payload.outputReelName, file_name)
-    output_dir = _safe_join(witness_videos_path, output_reel_id)
+    output_dir = _safe_join(witness_sequences_path, output_reel_id)
 
     if output_dir.exists() and not payload.overwriteExisting:
         raise HTTPException(status_code=409, detail='An extraction folder with this name already exists.')
@@ -1265,17 +1413,26 @@ def start_reel_sequence_extraction(
         raise HTTPException(status_code=503, detail='FFmpeg is not available in the server runtime environment.')
 
     film_path, source_video_path = _get_reel_source_video_path_or_404(film_id, reel_id)
+    reel_path = _get_reel_path(film_path, reel_id)
     output_reel_id = _build_output_reel_id(payload.outputReelName, reel_id)
-    output_dir = _safe_join(film_path, output_reel_id)
+    reels_root = _get_reels_root_path(film_path)
+    output_reel_path = _safe_join(reels_root, output_reel_id)
+    output_dir = _safe_join(output_reel_path, FRAMES_DIRNAME)
 
-    if output_reel_id == WITNESS_VIDEOS_DIRNAME:
+    if output_reel_id in {WITNESS_VIDEOS_DIRNAME, REELS_DIRNAME}:
         raise HTTPException(status_code=400, detail='Output reel name is reserved.')
 
-    if output_dir.exists() and not payload.overwriteExisting:
+    if output_reel_path.exists() and not payload.overwriteExisting:
         raise HTTPException(status_code=409, detail='A reel with this name already exists.')
 
-    if output_dir.exists() and payload.overwriteExisting:
-        shutil.rmtree(output_dir, ignore_errors=True)
+    if output_reel_path.exists() and payload.overwriteExisting:
+        shutil.rmtree(output_reel_path, ignore_errors=True)
+
+    if output_reel_path == reel_path:
+        raise HTTPException(status_code=400, detail='Output reel name must be different from source reel.')
+
+    output_reel_path.mkdir(parents=False, exist_ok=True)
+    _safe_join(output_reel_path, SEQUENCES_DIRNAME).mkdir(parents=False, exist_ok=True)
 
     job_id = f'seqext_{uuid4().hex}'
     job = SequenceExtractionJobStatusResponse(

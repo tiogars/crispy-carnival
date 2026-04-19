@@ -1,4 +1,5 @@
 import { Box, Button, Card, CardActionArea, CardContent, Grid, Paper, Typography } from '@mui/material';
+import ExtensionIcon from '@mui/icons-material/Extension';
 import UploadIcon from '@mui/icons-material/Upload';
 
 import type { Film, UploadWitnessVideoResponse } from '../App.types';
@@ -7,7 +8,9 @@ type WitnessesPageProps = {
   film: Film | null;
   witnessVideos: UploadWitnessVideoResponse[];
   isLoading: boolean;
+  selectedWitnessFileName: string;
   onUploadWitness: () => void;
+  onExtractSelectedWitness: () => void;
   onSelectWitness: (fileName: string) => void;
 };
 
@@ -15,7 +18,9 @@ export const WitnessesPage = ({
   film,
   witnessVideos,
   isLoading,
+  selectedWitnessFileName,
   onUploadWitness,
+  onExtractSelectedWitness,
   onSelectWitness,
 }: Readonly<WitnessesPageProps>) => {
   if (!film) {
@@ -61,15 +66,25 @@ export const WitnessesPage = ({
             {film.displayName}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          color="secondary"
-          startIcon={<UploadIcon />}
-          onClick={onUploadWitness}
-          disabled={isLoading}
-        >
-          Upload Video
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<UploadIcon />}
+            onClick={onUploadWitness}
+            disabled={isLoading}
+          >
+            Upload video
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<ExtensionIcon />}
+            onClick={onExtractSelectedWitness}
+            disabled={isLoading || !selectedWitnessFileName}
+          >
+            Extract sequence
+          </Button>
+        </Box>
       </Paper>
 
       {witnessVideos.length === 0 ? (

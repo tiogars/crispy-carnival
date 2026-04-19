@@ -2,11 +2,45 @@ import { Box, Button, Paper, ToggleButton, ToggleButtonGroup, Typography } from 
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import { Player } from '@remotion/player';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Film, Reel } from '../App.types';
 import { FilmSequenceComposition } from '../../features/film-viewer/FilmSequenceComposition';
 import { ImageStepPlayer } from '../../features/film-viewer/ImageStepPlayer';
+
+const getVideoMimeType = (fileNameOrUrl: string | null | undefined) => {
+  if (!fileNameOrUrl) {
+    return undefined;
+  }
+
+  const normalizedValue = fileNameOrUrl.split('?')[0]?.toLowerCase() ?? '';
+
+  if (normalizedValue.endsWith('.mov')) {
+    return 'video/quicktime';
+  }
+
+  if (normalizedValue.endsWith('.mp4')) {
+    return 'video/mp4';
+  }
+
+  if (normalizedValue.endsWith('.m4v')) {
+    return 'video/x-m4v';
+  }
+
+  if (normalizedValue.endsWith('.webm')) {
+    return 'video/webm';
+  }
+
+  if (normalizedValue.endsWith('.avi')) {
+    return 'video/x-msvideo';
+  }
+
+  if (normalizedValue.endsWith('.mkv')) {
+    return 'video/x-matroska';
+  }
+
+  return undefined;
+};
 
 type ReelDetailPageProps = {
   film: Film | null;
@@ -29,9 +63,21 @@ export const ReelDetailPage = ({
   onDelete,
   onExtractSequence,
 }: Readonly<ReelDetailPageProps>) => {
-  const [playerMode, setPlayerMode] = useState<'animated' | 'step'>('animated');
+  const hasFrames = frameUrls.length > 0;
+  const hasSourceVideo = Boolean(reel?.sourceVideoUrl);
+  const defaultPlayerMode = hasFrames ? 'animated' : 'source';
+  const [playerMode, setPlayerMode] = useState<'animated' | 'source' | 'step'>(defaultPlayerMode);
+  const [hasSourceVideoError, setHasSourceVideoError] = useState(false);
 
-  const handlePlayerModeChange = (event: React.MouseEvent<HTMLElement>, newMode: 'animated' | 'step' | null) => {
+  useEffect(() => {
+    setPlayerMode(defaultPlayerMode);
+    setHasSourceVideoError(false);
+  }, [defaultPlayerMode, reel?.id, reel?.sourceVideoUrl]);
+
+  const handlePlayerModeChange = (
+    event: React.MouseEvent<HTMLElement>,
+    newMode: 'animated' | 'source' | 'step' | null,
+  ) => {
     if (newMode !== null) {
       setPlayerMode(newMode);
     }
@@ -52,7 +98,9 @@ export const ReelDetailPage = ({
     );
   }
 
-  const durationInFrames = frameUrls.length > 0 ? frameUrls.length : 1;
+  const durationInFrames = hasFrames ? frameUrls.length : 1;
+  const sourceVideoMimeType = getVideoMimeType(reel.sourceVideoName ?? reel.sourceVideoUrl);
+  const shouldSuggestFrameExtraction = playerMode === 'source' && hasSourceVideoError;
 
   return (
     <Box
@@ -100,6 +148,19 @@ export const ReelDetailPage = ({
             flexWrap: 'wrap',
           }}
         >
+          {reel.sourceVideoUrl ? (
+            <Button
+              component="a"
+              href={reel.sourceVideoUrl}
+              target="_blank"
+              rel="noreferrer"
+              variant="contained"
+              color="info"
+              size="small"
+            >
+              Open source video
+            </Button>
+          ) : null}
           <Button
             variant="contained"
             size="small"
@@ -136,6 +197,11 @@ export const ReelDetailPage = ({
               },
             }}
           >
+            {hasSourceVideo ? (
+              <ToggleButton value="source" aria-label="source video player">
+                Source video
+              </ToggleButton>
+            ) : null}
             <ToggleButton value="animated" aria-label="animated player">
               Animated
             </ToggleButton>
@@ -145,7 +211,35 @@ export const ReelDetailPage = ({
           </ToggleButtonGroup>
         </Box>
 
-        {playerMode === 'animated' ? (
+        {playerMode === 'source' && hasSourceVideo ? (
+          <Box
+            sx={{
+              width: '100%',
+              aspectRatio: '16 / 9',
+              backgroundColor: '#000',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Box
+              component="video"
+              controls
+              preload="metadata"
+              sx={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+              }}
+              onError={() => setHasSourceVideoError(true)}
+              onLoadedData={() => setHasSourceVideoError(false)}
+            >
+              <source src={reel.sourceVideoUrl ?? undefined} type={sourceVideoMimeType} />
+            </Box>
+          </Box>
+        ) : playerMode === 'animated' ? (
           <Player
             acknowledgeRemotionLicense
             component={FilmSequenceComposition}
@@ -162,6 +256,32 @@ export const ReelDetailPage = ({
         ) : (
           <ImageStepPlayer frameUrls={frameUrls} />
         )}
+
+        {shouldSuggestFrameExtraction ? (
+          <Box
+            sx={{
+              marginTop: 1,
+              display: 'flex',
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 1,
+              flexDirection: { xs: 'column', sm: 'row' },
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#ffb4ab' }}>
+              This browser could not decode the source video. Open the direct file to inspect it, or extract frames from the file to continue working with this reel.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ExtensionIcon />}
+              onClick={onExtractSequence}
+              disabled={isExtracting}
+            >
+              Extract frames from file
+            </Button>
+          </Box>
+        ) : null}
 
         <Box
           sx={{
@@ -200,10 +320,23 @@ export const ReelDetailPage = ({
             </Typography>
 
             <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Source video
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe', wordBreak: 'break-word' }}>
+              {reel.sourceVideoName ?? 'Unavailable'}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
               Playback
             </Typography>
             <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
-              {isLoading ? 'Loading...' : `Loaded ${frameUrls.length} frame(s) for playback.`}
+              {isLoading
+                ? 'Loading...'
+                : hasFrames
+                  ? `Loaded ${frameUrls.length} frame(s) for playback.`
+                  : reel.sourceVideoUrl
+                    ? 'Playing the reel source video directly.'
+                    : 'No playback media available.'}
             </Typography>
           </Box>
         </Box>

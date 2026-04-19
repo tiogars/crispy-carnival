@@ -1,3 +1,4 @@
+import ExtensionIcon from '@mui/icons-material/Extension';
 import { Box, Button, Card, CardActionArea, CardContent, Grid, Paper, Typography } from '@mui/material';
 
 import type { Film, Reel } from '../App.types';
@@ -6,7 +7,9 @@ type ReelsPageProps = {
   film: Film | null;
   reels: Reel[];
   isLoading: boolean;
+  selectedReelId: string;
   onUploadVideo: () => void;
+  onExtractSelectedReel: () => void;
   onSelectReel: (reelId: string) => void;
 };
 
@@ -14,7 +17,9 @@ export const ReelsPage = ({
   film,
   reels,
   isLoading,
+  selectedReelId,
   onUploadVideo,
+  onExtractSelectedReel,
   onSelectReel,
 }: Readonly<ReelsPageProps>) => {
   if (!film) {
@@ -66,9 +71,19 @@ export const ReelsPage = ({
             </Typography>
           </Box>
 
-          <Button variant="contained" onClick={onUploadVideo} disabled={isLoading}>
-            Upload video
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button variant="contained" onClick={onUploadVideo} disabled={isLoading}>
+              Upload video
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<ExtensionIcon />}
+              onClick={onExtractSelectedReel}
+              disabled={isLoading || !selectedReelId}
+            >
+              Extract sequence
+            </Button>
+          </Box>
         </Box>
       </Paper>
 

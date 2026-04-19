@@ -144,6 +144,7 @@ export const App = () => {
   const [reels, setReels] = useState<Reel[]>([]);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [reelsByFilmId, setReelsByFilmId] = useState<Record<string, Reel[]>>({});
+  const [reelSequencesByFilmId, setReelSequencesByFilmId] = useState<Record<string, Record<string, Reel[]>>>({});
   const [frameUrls, setFrameUrls] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -226,30 +227,66 @@ export const App = () => {
 
     try {
       const payload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${filmId}/reels`);
+      const resolvedReels = payload.reels.map((reel) => ({
+        ...reel,
+        sourceVideoUrl: reel.sourceVideoUrl
+          ? (reel.sourceVideoUrl.startsWith('http') ? reel.sourceVideoUrl : `${apiBaseUrl}${reel.sourceVideoUrl}`)
+          : reel.sourceVideoUrl,
+      }));
+
       setReelsByFilmId((prev) => ({
         ...prev,
-        [filmId]: payload.reels,
+        [filmId]: resolvedReels,
+      }));
+
+      const reelSequencesEntries = await Promise.all(
+        resolvedReels.map(async (reel) => {
+          if (!reel.sourceVideoName) {
+            return [reel.id, []] as const;
+          }
+
+          try {
+            const sequencesPayload = await fetchJson<{ reels: Reel[] }>(`/api/filesystem/films/${filmId}/reels/${reel.id}/sequences`);
+            const resolvedSequenceReels = sequencesPayload.reels.map((sequenceReel) => ({
+              ...sequenceReel,
+              sourceVideoUrl: sequenceReel.sourceVideoUrl
+                ? (sequenceReel.sourceVideoUrl.startsWith('http')
+                    ? sequenceReel.sourceVideoUrl
+                    : `${apiBaseUrl}${sequenceReel.sourceVideoUrl}`)
+                : sequenceReel.sourceVideoUrl,
+            }));
+
+            return [reel.id, resolvedSequenceReels] as const;
+          } catch {
+            return [reel.id, []] as const;
+          }
+        }),
+      );
+
+      setReelSequencesByFilmId((prev) => ({
+        ...prev,
+        [filmId]: Object.fromEntries(reelSequencesEntries),
       }));
 
       if (filmId === selectedFilmId) {
-        setReels(payload.reels);
+        setReels(resolvedReels);
 
-        if (payload.reels.length === 0) {
+        if (resolvedReels.length === 0) {
           setSelectedReelId('');
           setFrameUrls([]);
           return;
         }
 
         setSelectedReelId((currentReelId) => {
-          if (preferredReelId && payload.reels.some((reel) => reel.id === preferredReelId)) {
+          if (preferredReelId && resolvedReels.some((reel) => reel.id === preferredReelId)) {
             return preferredReelId;
           }
 
-          if (currentReelId && payload.reels.some((reel) => reel.id === currentReelId)) {
+          if (currentReelId && resolvedReels.some((reel) => reel.id === currentReelId)) {
             return currentReelId;
           }
 
-          return payload.reels[0].id;
+          return resolvedReels[0].id;
         });
       }
     } catch (error) {
@@ -448,7 +485,7 @@ export const App = () => {
 
       void loadWitnessVideos(selectedFilmId, resolvedMediaUrl);
 
-      setSuccessMessage(`Witness video "${payload.fileName}" uploaded successfully.`);
+      setSuccessMessage(`Witness video "${payload.fileName}" uploaded. Use the Extract sequence action in the toolbar when ready.`);
       closeUploadWitnessDialog();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to upload witness video.');
@@ -488,7 +525,7 @@ export const App = () => {
       await loadReelsForFilm(selectedFilmId, payload.reel.id);
       setSelectedReelId(payload.reel.id);
       setSelectedNavigationNode(`reel-${selectedFilmId}-${payload.reel.id}`);
-      setSuccessMessage(`Video "${payload.sourceVideoName}" imported as reel "${payload.reel.id}".`);
+      setSuccessMessage(`Video "${payload.sourceVideoName}" uploaded as reel "${payload.reel.id}". Use the Extract sequence action in the toolbar when ready.`);
       closeUploadReelDialog();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to upload reel video.');
@@ -783,6 +820,16 @@ export const App = () => {
     [witnessVideos, selectedWitnessVideoUrl],
   );
 
+  const parseScopedReelNode = (value: string) => {
+    const [filmId, reelId, sequenceReelId] = value.split('::');
+
+    return {
+      filmId,
+      reelId,
+      sequenceReelId,
+    };
+  };
+
   const parseNavigationNode = (nodeId: string) => {
     if (nodeId === 'home') {
       return { type: 'home' as const };
@@ -808,6 +855,26 @@ export const App = () => {
     if (nodeId.startsWith('reels-')) {
       const filmId = nodeId.replace('reels-', '');
       return { type: 'reels' as const, filmId };
+    }
+
+    if (nodeId.startsWith('reel-file-')) {
+      const { filmId, reelId } = parseScopedReelNode(nodeId.replace('reel-file-', ''));
+      return { type: 'reelFile' as const, filmId, reelId };
+    }
+
+    if (nodeId.startsWith('reel-sequences-')) {
+      const { filmId, reelId } = parseScopedReelNode(nodeId.replace('reel-sequences-', ''));
+      return { type: 'reelSequences' as const, filmId, reelId };
+    }
+
+    if (nodeId.startsWith('reel-sequence-')) {
+      const { filmId, reelId, sequenceReelId } = parseScopedReelNode(nodeId.replace('reel-sequence-', ''));
+      return { type: 'reelSequence' as const, filmId, reelId, sequenceReelId: sequenceReelId ?? '' };
+    }
+
+    if (nodeId.startsWith('reel-frames-')) {
+      const { filmId, reelId } = parseScopedReelNode(nodeId.replace('reel-frames-', ''));
+      return { type: 'reelFrames' as const, filmId, reelId };
     }
 
     if (nodeId.startsWith('reel-')) {
@@ -847,8 +914,21 @@ export const App = () => {
     } else if (context.type === 'reel') {
       setSelectedFilmId(context.filmId);
       setSelectedReelId(context.reelId);
+    } else if (context.type === 'reelFile' || context.type === 'reelSequences' || context.type === 'reelFrames') {
+      setSelectedFilmId(context.filmId);
+      setSelectedReelId(context.reelId);
+    } else if (context.type === 'reelSequence') {
+      setSelectedFilmId(context.filmId);
+      setSelectedReelId(context.sequenceReelId);
     }
   };
+
+  const isReelDetailNavigation =
+    navigationContext.type === 'reel' ||
+    navigationContext.type === 'reelFile' ||
+    navigationContext.type === 'reelSequences' ||
+    navigationContext.type === 'reelFrames' ||
+    navigationContext.type === 'reelSequence';
 
   return (
     <Box
@@ -878,6 +958,7 @@ export const App = () => {
         <AppNavigationTree
           films={films}
           reels={reelsByFilmId}
+          reelSequences={reelSequencesByFilmId}
           witnessVideos={witnessesByFilmId}
           selectedNode={selectedNavigationNode}
           onNodeSelect={handleNavigationNodeSelect}
@@ -945,7 +1026,22 @@ export const App = () => {
               film={currentFilm}
               witnessVideos={witnessesByFilmId[navigationContext.filmId] || []}
               isLoading={isLoading}
+              selectedWitnessFileName={selectedWitnessFileName}
               onUploadWitness={() => setUploadWitnessDialogOpen(true)}
+              onExtractSelectedWitness={() => {
+                const selectedWitness = selectedWitnessFileName
+                  ? (witnessesByFilmId[navigationContext.filmId] || []).find((video) => video.fileName === selectedWitnessFileName)
+                  : null;
+
+                if (!selectedWitness) {
+                  setErrorMessage('Select a witness video before starting extraction.');
+                  return;
+                }
+
+                setSequenceExtractionSource({ type: 'witness', name: selectedWitness.fileName });
+                setSequenceExtractionDialogOpen(true);
+                setSequenceExtractionErrorMessage('');
+              }}
               onSelectWitness={(fileName) => {
                 setSelectedWitnessFileName(fileName);
                 const filmWitnesses = witnessesByFilmId[navigationContext.filmId] || [];
@@ -982,7 +1078,18 @@ export const App = () => {
               film={currentFilm}
               reels={reelsByFilmId[navigationContext.filmId] || []}
               isLoading={isLoading}
+              selectedReelId={selectedReelId}
               onUploadVideo={() => setUploadReelDialogOpen(true)}
+              onExtractSelectedReel={() => {
+                if (!selectedReelId) {
+                  setErrorMessage('Select a reel before starting extraction.');
+                  return;
+                }
+
+                setSequenceExtractionSource({ type: 'reel', name: selectedReelId });
+                setSequenceExtractionDialogOpen(true);
+                setSequenceExtractionErrorMessage('');
+              }}
               onSelectReel={(reelId) => {
                 setSelectedReelId(reelId);
                 setSelectedNavigationNode(`reel-${navigationContext.filmId}-${reelId}`);
@@ -990,7 +1097,7 @@ export const App = () => {
             />
           )}
 
-          {navigationContext.type === 'reel' && (
+          {isReelDetailNavigation && (
             <ReelDetailPage
               film={currentFilm}
               reel={currentReel}

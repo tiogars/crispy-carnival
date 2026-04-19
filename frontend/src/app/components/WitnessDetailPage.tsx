@@ -1,6 +1,7 @@
 import { Box, Button, Paper, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExtensionIcon from '@mui/icons-material/Extension';
+import { useEffect, useState } from 'react';
 
 import type { Film, UploadWitnessVideoResponse } from '../App.types';
 
@@ -21,6 +22,12 @@ export const WitnessDetailPage = ({
   onDelete,
   onExtractSequence,
 }: Readonly<WitnessDetailPageProps>) => {
+  const [hasVideoError, setHasVideoError] = useState(false);
+
+  useEffect(() => {
+    setHasVideoError(false);
+  }, [witness?.mediaUrl]);
+
   if (!film || !witness) {
     return (
       <Paper
@@ -133,6 +140,8 @@ export const WitnessDetailPage = ({
             component="video"
             src={witness.mediaUrl}
             controls
+            onError={() => setHasVideoError(true)}
+            onLoadedData={() => setHasVideoError(false)}
             sx={{
               width: '100%',
               height: '100%',
@@ -142,6 +151,32 @@ export const WitnessDetailPage = ({
             }}
           />
         </Box>
+
+        {hasVideoError ? (
+          <Box
+            sx={{
+              marginTop: 1,
+              display: 'flex',
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 1,
+              flexDirection: { xs: 'column', sm: 'row' },
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#ffb4ab' }}>
+              This browser could not decode the video file. Open the file directly, or extract frames from the file to continue the analysis.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ExtensionIcon />}
+              onClick={onExtractSequence}
+              disabled={isExtracting}
+            >
+              Extract frames from file
+            </Button>
+          </Box>
+        ) : null}
 
         <Box
           sx={{

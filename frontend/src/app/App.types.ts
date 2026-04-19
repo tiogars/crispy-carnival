@@ -1,4 +1,15 @@
-export type NavigationNode = 'home' | `film-${string}` | `witnesses-${string}` | `witness-${string}` | `reels-${string}` | `reel-${string}` | `sequences-${string}`;
+export type NavigationNode =
+  | 'home'
+  | `film-${string}`
+  | `witnesses-${string}`
+  | `witness-${string}`
+  | `reels-${string}`
+  | `reel-${string}`
+  | `reel-file-${string}`
+  | `reel-sequences-${string}`
+  | `reel-sequence-${string}`
+  | `reel-frames-${string}`
+  | `sequences-${string}`;
 
 export type Film = {
   id: string;
@@ -8,6 +19,8 @@ export type Film = {
 export type Reel = {
   id: string;
   frameCount: number;
+  sourceVideoName?: string | null;
+  sourceVideoUrl?: string | null;
 };
 
 export type ReelFramesResponse = {
