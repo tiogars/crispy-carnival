@@ -1,4 +1,4 @@
-import { Box, Button, Link, Paper, Typography } from '@mui/material';
+import { Box, Button, Paper, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExtensionIcon from '@mui/icons-material/Extension';
 
@@ -58,9 +58,6 @@ export const WitnessDetailPage = ({
         <Typography color="text.secondary" variant="body2" sx={{ marginBottom: 2 }}>
           {film.displayName}
         </Typography>
-        <Typography color="text.secondary" variant="body2" sx={{ marginBottom: 2 }}>
-          Size: {(witness.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
-        </Typography>
       </Paper>
 
       <Paper
@@ -76,15 +73,62 @@ export const WitnessDetailPage = ({
       >
         <Box
           sx={{
+            position: 'relative',
             flex: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 1,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            marginBottom: 2,
+            overflow: 'hidden',
           }}
         >
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 2,
+              display: 'flex',
+              gap: 1,
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+            }}
+          >
+            {witness.mediaUrl ? (
+              <Button
+                component="a"
+                href={witness.mediaUrl}
+                target="_blank"
+                rel="noreferrer"
+                size="small"
+                variant="contained"
+                color="info"
+              >
+                Open in new tab
+              </Button>
+            ) : null}
+            <Button
+              variant="contained"
+              startIcon={<ExtensionIcon />}
+              onClick={onExtractSequence}
+              disabled={isExtracting}
+              size="small"
+            >
+              Extract Sequence
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={onDelete}
+              disabled={isDeleting}
+              size="small"
+            >
+              Delete Video
+            </Button>
+          </Box>
+
           <Box
             component="video"
             src={witness.mediaUrl}
@@ -99,49 +143,42 @@ export const WitnessDetailPage = ({
           />
         </Box>
 
-        {witness.mediaUrl ? (
-          <Link
-            href={witness.mediaUrl}
-            target="_blank"
-            rel="noreferrer"
-            sx={{
-              color: '#90caf9',
-              fontWeight: 600,
-              textDecoration: 'none',
-              marginBottom: 2,
-              '&:hover': {
-                textDecoration: 'underline',
-              },
-            }}
-          >
-            Open in new tab
-          </Link>
-        ) : null}
-
         <Box
           sx={{
-            display: 'flex',
-            gap: 1,
-            flexWrap: 'wrap',
+            marginTop: 1,
+            padding: 1.25,
+            borderRadius: 1,
+            backgroundColor: '#121a24',
+            border: '1px solid rgba(144, 202, 249, 0.28)',
+            display: 'grid',
+            gap: 0.5,
           }}
         >
-          <Button
-            variant="contained"
-            startIcon={<ExtensionIcon />}
-            onClick={onExtractSequence}
-            disabled={isExtracting}
-          >
-            Extract Sequence
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDelete}
-            disabled={isDeleting}
-          >
-            Delete Video
-          </Button>
+          <Typography variant="subtitle2" sx={{ color: '#ffffff', fontWeight: 700 }}>
+            Details
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(90px, auto) 1fr', columnGap: 1, rowGap: 0.5 }}>
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              File
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe', wordBreak: 'break-word' }}>
+              {witness.fileName}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Film
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {film.displayName}
+            </Typography>
+
+            <Typography variant="body2" sx={{ color: '#90caf9', fontWeight: 600 }}>
+              Size
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#e8f0fe' }}>
+              {(witness.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
+            </Typography>
+          </Box>
         </Box>
       </Paper>
     </Box>
