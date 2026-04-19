@@ -1,3 +1,5 @@
+export type NavigationNode = 'home' | `film-${string}` | `witnesses-${string}` | `witness-${string}` | `reels-${string}` | `reel-${string}` | `sequences-${string}`;
+
 export type Film = {
   id: string;
   displayName: string;

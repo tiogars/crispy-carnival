@@ -56,10 +56,11 @@ export const ImageStepPlayer = ({ frameUrls }: ImageStepPlayerProps) => {
           justifyContent: 'center',
         }}
       >
-        <img
+        <Box
+          component="img"
           src={currentFrameUrl}
           alt={`Frame ${currentFrameIndex}`}
-          style={{
+          sx={{
             width: '100%',
             height: '100%',
             objectFit: 'contain',

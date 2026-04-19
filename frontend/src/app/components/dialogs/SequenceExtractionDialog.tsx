@@ -143,7 +143,7 @@ const ProgressStatusPanel = ({
         ) : null}
         {hasRate ? (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            Estimated speed: {formatProgressRate(jobStatus.progressRatePercentPerSecond)}
+            Estimated speed: {formatProgressRate(jobStatus.progressRatePercentPerSecond ?? 0)}
           </Typography>
         ) : null}
       </Box>

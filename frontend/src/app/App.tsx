@@ -9,6 +9,7 @@ import {
   CreateFilmRequest,
   CreateFilmResponse,
   Film,
+  NavigationNode,
   NewFilmFormValues,
   Reel,
   ReelFramesResponse,
@@ -130,7 +131,7 @@ const defaultSequenceExtractionValues: SequenceExtractionFormValues = {
 };
 
 export const App = () => {
-  const [selectedNavigationNode, setSelectedNavigationNode] = useState<string>('home');
+  const [selectedNavigationNode, setSelectedNavigationNode] = useState<NavigationNode | ''>('home' as NavigationNode);
   const [films, setFilms] = useState<Film[]>([]);
   const [selectedFilmId, setSelectedFilmId] = useState<string>('');
   const [reels, setReels] = useState<Reel[]>([]);
@@ -655,7 +656,7 @@ export const App = () => {
   const navigationContext = parseNavigationNode(selectedNavigationNode);
 
   const handleNavigationNodeSelect = (nodeId: string) => {
-    setSelectedNavigationNode(nodeId);
+    setSelectedNavigationNode(nodeId as NavigationNode | '');
 
     const context = parseNavigationNode(nodeId);
 

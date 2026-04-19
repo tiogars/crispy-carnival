@@ -85,15 +85,16 @@ export const WitnessDetailPage = ({
             marginBottom: 2,
           }}
         >
-          <video
+          <Box
+            component="video"
             src={witness.mediaUrl}
             controls
-            style={{
+            sx={{
               width: '100%',
               height: '100%',
               maxHeight: 400,
               objectFit: 'contain',
-              borderRadius: 8,
+              borderRadius: 1,
             }}
           />
         </Box>

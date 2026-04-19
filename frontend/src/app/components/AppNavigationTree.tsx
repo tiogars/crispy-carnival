@@ -7,9 +7,7 @@ import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { useState } from 'react';
 
-import type { Film, Reel, UploadWitnessVideoResponse } from '../App.types';
-
-type NavigationNode = 'home' | `film-${string}` | `witnesses-${string}` | `witness-${string}` | `reels-${string}` | `reel-${string}` | `sequences-${string}`;
+import type { Film, NavigationNode, Reel, UploadWitnessVideoResponse } from '../App.types';
 
 type AppNavigationTreeProps = {
   films: Film[];
